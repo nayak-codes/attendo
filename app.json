@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "06547ed3-537c-4cdd-a131-13e2924d3a3f"
+      }
+    },
+    "android": {
+      "package": "com.balajimaharajsorganization.smartattendance"
+    }
+  }
+}

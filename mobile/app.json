@@ -3,6 +3,11 @@
     "name": "EduTrack Smart Attendance",
     "slug": "edutrack-mobile",
     "version": "1.0.0",
+    "extra": {
+      "eas": {
+        "projectId": "06547ed3-537c-4cdd-a131-13e2924d3a3f"
+      }
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -10,6 +15,7 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.balajimaharajsorganization.smartattendance",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#060B18"

@@ -3,8 +3,7 @@ const path = require('path');
 
 const config = getDefaultConfig(__dirname);
 
-// Step 1: Add .cjs support
-config.resolver.sourceExts = ['js', 'jsx', 'ts', 'tsx', 'cjs', 'mjs', 'json'];
+config.resolver.sourceExts = [...config.resolver.sourceExts, 'cjs', 'mjs'];
 
 // Step 2: Force all @firebase/* packages to use their React Native bundles
 config.resolver.resolveRequest = (context, moduleName, platform) => {
