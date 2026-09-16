@@ -388,6 +388,10 @@ const CollegeAdminDashboard = () => {
           <SectionManager
             adminCollegeCode={adminCollegeCode}
             onSectionsChange={setSections}
+            onNavigateTab={(tabId, targetSection) => {
+              setActiveTab(tabId);
+              if (targetSection) setSectionFilter(targetSection);
+            }}
           />
         )}
 

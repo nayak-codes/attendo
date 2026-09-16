@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  db, collection, doc, setDoc, deleteDoc, onSnapshot, query, where, serverTimestamp
+  db, collection, doc, setDoc, deleteDoc, onSnapshot, query, where
 } from '../../firebase';
+import SectionAnalytics from './SectionAnalytics';
 import './SectionManager.css';
 
 const DEPARTMENTS = ['CSE', 'CSD', 'CSM', 'ECE', 'EEE', 'MECH', 'CIVIL', 'IT'];
 const YEARS = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
 const SECTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-const SectionManager = ({ adminCollegeCode, onSectionsChange }) => {
+const SectionManager = ({ adminCollegeCode, onSectionsChange, onNavigateTab }) => {
   const [sections, setSections] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+  const [selectedAnalyticsSection, setSelectedAnalyticsSection] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [filterDept, setFilterDept] = useState('ALL');
@@ -131,9 +133,9 @@ const SectionManager = ({ adminCollegeCode, onSectionsChange }) => {
       {/* Header */}
       <div className="sec-manager-header">
         <div>
-          <h2 className="sec-manager-title">🏢 Section Management</h2>
+          <h2 className="sec-manager-title">🏢 Section Control & Analysis Center</h2>
           <p className="sec-manager-sub">
-            Create department-wise sections (CSE-A, ECE-B) and assign students to them
+            Create sections, monitor section-wise analytics, track low attendance (&lt;50%), assign timetables & faculty.
           </p>
         </div>
         <button className="btn-create-section" onClick={() => setShowAddModal(true)}>
@@ -219,12 +221,39 @@ const SectionManager = ({ adminCollegeCode, onSectionsChange }) => {
                         title="Delete section"
                       >✕</button>
                     </div>
+
                     <div className="section-year-tag">{sec.year}</div>
+
                     <div className="section-card-footer">
                       <span className="section-student-count">
                         👥 {sec.studentCount || 0} students
                       </span>
                       <span className="section-dept-tag">{sec.department}</span>
+                    </div>
+
+                    {/* QUICK CONTROL & ANALYSIS BUTTONS */}
+                    <div className="sec-action-btns">
+                      <button
+                        className="btn-sec-action btn-sec-analysis"
+                        onClick={() => setSelectedAnalyticsSection(sec)}
+                        title="View Section Analysis & Low Attendance Alert"
+                      >
+                        📊 Analysis (&lt;50%)
+                      </button>
+                      <button
+                        className="btn-sec-action btn-sec-tt"
+                        onClick={() => onNavigateTab && onNavigateTab('timetable', sec.displayName)}
+                        title="Setup Timetable for this section"
+                      >
+                        📅 Timetable
+                      </button>
+                      <button
+                        className="btn-sec-action btn-sec-fac"
+                        onClick={() => onNavigateTab && onNavigateTab('teachers', sec.displayName)}
+                        title="Add/Assign Faculty to this section"
+                      >
+                        👨‍🏫 Faculty
+                      </button>
                     </div>
                   </motion.div>
                 ))}
@@ -232,6 +261,16 @@ const SectionManager = ({ adminCollegeCode, onSectionsChange }) => {
             </div>
           ))}
         </div>
+      )}
+
+      {/* SECTION ANALYTICS MODAL */}
+      {selectedAnalyticsSection && (
+        <SectionAnalytics
+          section={selectedAnalyticsSection}
+          adminCollegeCode={adminCollegeCode}
+          onClose={() => setSelectedAnalyticsSection(null)}
+          onNavigateTab={onNavigateTab}
+        />
       )}
 
       {/* ADD SECTION MODAL */}
