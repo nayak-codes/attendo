@@ -89,6 +89,23 @@
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.btn-logout {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #ef4444;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-logout:hover {
+  background: rgba(239, 68, 68, 0.2);
 }
 
 .btn-primary-add {
@@ -362,6 +379,32 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  transition: border-color 0.2s;
+}
+
+.student-card:hover {
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.student-card-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn-icon-edit {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  color: #60a5fa;
+  padding: 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 14px;
+}
+
+.btn-icon-edit:hover {
+  background: rgba(59, 130, 246, 0.25);
 }
 
 .student-card-left {
@@ -490,6 +533,11 @@
   color: white;
   font-size: 13px;
   outline: none;
+  width: 100%;
+}
+
+.modal-text-input:focus {
+  border-color: #60a5fa;
 }
 
 .btn-add-custom {

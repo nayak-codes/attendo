@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "EduTrack Smart Attendance",
-    "slug": "edutrack-mobile",
+    "slug": "smart-attendance",
     "version": "1.0.0",
     "extra": {
       "eas": {
