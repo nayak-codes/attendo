@@ -4,22 +4,95 @@ import { useAuth } from '../context/AuthContext';
 import { useAttendance } from '../context/AttendanceContext';
 import './StudentDashboard.css';
 
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+const addMinutes = (time, mins) => {
+  if (!time) return '';
+  const [h, m] = time.split(':').map(Number);
+  const total = h * 60 + m + mins;
+  const newH = Math.floor(total / 60) % 24;
+  const newM = total % 60;
+  return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
+};
+
+const buildTimelineMap = (config) => {
+  const cfg = config || {
+    startTime: '09:00',
+    periodsPerDay: 7,
+    periodDuration: 50,
+    hasLunchBreak: true,
+    lunchAfterPeriod: 4,
+    lunchDuration: 45,
+  };
+  const map = {};
+  let current = cfg.startTime || '09:00';
+  for (let i = 1; i <= (cfg.periodsPerDay || 7); i++) {
+    const end = addMinutes(current, cfg.periodDuration || 50);
+    map[i] = { period: i, start: current, end, label: `Period ${i}` };
+    current = end;
+    if (cfg.hasLunchBreak && i === cfg.lunchAfterPeriod) {
+      const lunchEnd = addMinutes(current, cfg.lunchDuration || 45);
+      current = lunchEnd;
+    }
+  }
+  return map;
+};
+
 const StudentDashboard = () => {
   const { user } = useAuth();
   const {
     loading,
     attendanceRecords,
     notifications,
+    timetables,
+    collegeConfig,
     getStudentAttendance,
     markNotificationRead,
-    sessions,
   } = useAttendance();
 
   const [activeTab, setActiveTab] = useState('overview');
 
-  const rollNo = user?.rollNo || user?.collegeId || '';
+  // Current day calculation
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const realDayName = dayNames[new Date().getDay()];
+  const defaultDay = realDayName === 'Sunday' ? 'Monday' : realDayName;
+  const [selectedTtDay, setSelectedTtDay] = useState(defaultDay);
 
-  // 100% Live Firestore data — zero mock
+  const rollNo = user?.rollNo || user?.collegeId || '';
+  const studentSection = user?.section || 'A';
+
+  // Find matching section timetable from Firestore live list
+  const sectionTtDoc = timetables.find(tt => {
+    if (!tt.section) return false;
+    const sec = tt.section.toLowerCase().trim();
+    const target = studentSection.toLowerCase().trim();
+    return sec === target || sec.includes(target) || target.includes(sec);
+  }) || timetables[0] || null;
+
+  const timelineMap = buildTimelineMap(collegeConfig);
+
+  const getDaySchedule = (dayName) => {
+    if (!sectionTtDoc || !sectionTtDoc.schedule) return [];
+    const dayCells = sectionTtDoc.schedule[dayName] || [];
+    return dayCells
+      .map(cell => {
+        const timeInfo = timelineMap[cell.period] || { start: '09:00', end: '09:50', label: `Period ${cell.period}` };
+        return {
+          period: cell.period,
+          periodLabel: timeInfo.label,
+          start: timeInfo.start,
+          end: timeInfo.end,
+          subject: cell.subject,
+          teacherName: cell.teacherName || '—',
+        };
+      })
+      .sort((a, b) => a.period - b.period);
+  };
+
+  const todayScheduleSlots = getDaySchedule(defaultDay);
+  const selectedDayScheduleSlots = getDaySchedule(selectedTtDay);
+
+  // 100% Live Firestore data
   const subjectData = getStudentAttendance(rollNo);
   const subjects = Object.entries(subjectData);
 
@@ -164,7 +237,7 @@ const StudentDashboard = () => {
 
         {/* Tabs */}
         <div className="std-tabs">
-          {['overview', 'subjects', 'recent'].map(tab => (
+          {['overview', 'timetable', 'subjects', 'recent'].map(tab => (
             <button
               key={tab}
               id={`tab-${tab}`}
@@ -172,6 +245,7 @@ const StudentDashboard = () => {
               onClick={() => setActiveTab(tab)}
             >
               {tab === 'overview' && '📊 Overview'}
+              {tab === 'timetable' && '📅 Timetable'}
               {tab === 'subjects' && '📚 Subjects'}
               {tab === 'recent' && `🕐 Recent${unreadNotifs.length > 0 ? ` (${unreadNotifs.length})` : ''}`}
             </button>
@@ -181,58 +255,145 @@ const StudentDashboard = () => {
         {/* ═══ Overview tab ═══ */}
         {activeTab === 'overview' && (
           <motion.div
-            className="subjects-grid"
+            className="overview-tab-content"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            {loading ? null : subjects.length === 0 ? (
-              <EmptyState
-                icon="📊"
-                title="No Subject Data"
-                subtitle="Subject-wise attendance will appear once your teacher marks attendance."
-              />
-            ) : (
-              subjects.map(([subject, data], i) => {
-                const pct = data.total > 0 ? Math.round((data.attended / data.total) * 100) : 0;
-                const status = getStatus(pct);
-                const needed = pct < 75 ? Math.ceil((0.75 * data.total - data.attended) / 0.25) : 0;
+            {/* TODAY'S CLASSES WIDGET */}
+            <div className="std-today-widget glass-card" style={{ marginBottom: 20 }}>
+              <div className="today-widget-header">
+                <div>
+                  <span className="live-badge">● TODAY'S SCHEDULE ({defaultDay})</span>
+                  <h3 className="widget-title">Classes for Section {studentSection}</h3>
+                </div>
+                <button className="btn-view-full-tt" onClick={() => setActiveTab('timetable')}>
+                  View Full Week →
+                </button>
+              </div>
 
-                return (
-                  <motion.div
-                    key={subject}
-                    className="subject-card glass-card"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.08 }}
-                    whileHover={{ y: -3 }}
-                  >
-                    <div className="subj-header">
-                      <div className="subj-icon">📖</div>
-                      <div className="subj-badge" style={{ background: status.bg, color: status.color }}>
-                        {status.label}
+              {todayScheduleSlots.length === 0 ? (
+                <p className="no-today-classes">☕ No classes scheduled for today in section timetable.</p>
+              ) : (
+                <div className="today-slots-row">
+                  {todayScheduleSlots.map((slot, i) => (
+                    <div key={i} className="today-slot-pill">
+                      <div className="slot-period-num">P{slot.period}</div>
+                      <div>
+                        <div className="slot-sub-title">{slot.subject}</div>
+                        <div className="slot-sub-time">{slot.start}–{slot.end} • {slot.teacherName}</div>
                       </div>
                     </div>
-                    <h3 className="subj-name">{subject}</h3>
-                    <div className="subj-progress">
-                      <div className="subj-progress-bar">
-                        <motion.div
-                          className="subj-progress-fill"
-                          style={{ background: status.color }}
-                          initial={{ width: 0 }}
-                          animate={{ width: `${pct}%` }}
-                          transition={{ duration: 0.8, delay: i * 0.08 }}
-                        />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* SUBJECT CARDS */}
+            <div className="subjects-grid">
+              {loading ? null : subjects.length === 0 ? (
+                <EmptyState
+                  icon="📊"
+                  title="No Subject Data"
+                  subtitle="Subject-wise attendance will appear once your teacher marks attendance."
+                />
+              ) : (
+                subjects.map(([subject, data], i) => {
+                  const pct = data.total > 0 ? Math.round((data.attended / data.total) * 100) : 0;
+                  const status = getStatus(pct);
+                  const needed = pct < 75 ? Math.ceil((0.75 * data.total - data.attended) / 0.25) : 0;
+
+                  return (
+                    <motion.div
+                      key={subject}
+                      className="subject-card glass-card"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.08 }}
+                      whileHover={{ y: -3 }}
+                    >
+                      <div className="subj-header">
+                        <div className="subj-icon">📖</div>
+                        <div className="subj-badge" style={{ background: status.bg, color: status.color }}>
+                          {status.label}
+                        </div>
                       </div>
-                      <span className="subj-pct" style={{ color: status.color }}>{pct}%</span>
+                      <h3 className="subj-name">{subject}</h3>
+                      <div className="subj-progress">
+                        <div className="subj-progress-bar">
+                          <motion.div
+                            className="subj-progress-fill"
+                            style={{ background: status.color }}
+                            initial={{ width: 0 }}
+                            animate={{ width: `${pct}%` }}
+                            transition={{ duration: 0.8, delay: i * 0.08 }}
+                          />
+                        </div>
+                        <span className="subj-pct" style={{ color: status.color }}>{pct}%</span>
+                      </div>
+                      <div className="subj-stats">
+                        <span className="subj-stat">{data.attended}/{data.total} classes</span>
+                        {needed > 0 && <span className="subj-warning">Need {needed} more</span>}
+                      </div>
+                    </motion.div>
+                  );
+                })
+              )}
+            </div>
+          </motion.div>
+        )}
+
+        {/* ═══ Timetable tab ═══ */}
+        {activeTab === 'timetable' && (
+          <motion.div className="std-timetable-tab" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <div className="std-tt-card glass-card">
+              <div className="std-tt-header">
+                <div>
+                  <div className="tt-live-badge">
+                    <span className="pulse-dot-green" /> REAL-TIME ADMIN SYNC
+                  </div>
+                  <h2>🗓️ Weekly Timetable — Section {studentSection}</h2>
+                  <p className="std-tt-sub">Official schedule configured by College Admin</p>
+                </div>
+                <div className="std-day-pills">
+                  {DAYS.map(day => (
+                    <button
+                      key={day}
+                      className={`std-day-btn ${selectedTtDay === day ? 'active' : ''} ${defaultDay === day ? 'is-today' : ''}`}
+                      onClick={() => setSelectedTtDay(day)}
+                    >
+                      {day.slice(0, 3)}
+                      {defaultDay === day && <span className="today-dot">•</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {selectedDayScheduleSlots.length === 0 ? (
+                <EmptyState
+                  icon="☕"
+                  title={`No Classes for ${selectedTtDay}`}
+                  subtitle={`No timetable entries configured for Section ${studentSection} on ${selectedTtDay}.`}
+                />
+              ) : (
+                <div className="std-tt-list">
+                  {selectedDayScheduleSlots.map((slot, i) => (
+                    <div key={i} className="std-tt-slot-card glass-card">
+                      <div className="std-tt-time-col">
+                        <span className="std-p-badge">P{slot.period}</span>
+                        <span className="std-slot-time">{slot.start} – {slot.end}</span>
+                      </div>
+                      <div className="std-tt-main-col">
+                        <h4 className="std-slot-subject">{slot.subject}</h4>
+                        <p className="std-slot-teacher">👨‍🏫 Faculty: <strong>{slot.teacherName}</strong></p>
+                      </div>
+                      <div className="std-tt-status-col">
+                        <span className="std-period-label">{slot.periodLabel}</span>
+                      </div>
                     </div>
-                    <div className="subj-stats">
-                      <span className="subj-stat">{data.attended}/{data.total} classes</span>
-                      {needed > 0 && <span className="subj-warning">Need {needed} more</span>}
-                    </div>
-                  </motion.div>
-                );
-              })
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </motion.div>
         )}
 

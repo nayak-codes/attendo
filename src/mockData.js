@@ -65,14 +65,14 @@ export const MOCK_SECTIONS = ['A', 'B', 'C', 'D'];
 
 export const MOCK_YEARS = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
 
-// Mock attendance history for student dashboard
+// Mock attendance history for student dashboard (default 0 - attendance considered from now on)
 export const MOCK_ATTENDANCE_HISTORY = {
   'CE21001': {
-    'Data Structures': { total: 30, attended: 27 },
-    'DBMS': { total: 28, attended: 25 },
-    'Operating Systems': { total: 30, attended: 22 },
-    'Computer Networks': { total: 25, attended: 23 },
-    'Software Engineering': { total: 20, attended: 19 },
+    'Data Structures': { total: 0, attended: 0 },
+    'DBMS': { total: 0, attended: 0 },
+    'Operating Systems': { total: 0, attended: 0 },
+    'Computer Networks': { total: 0, attended: 0 },
+    'Software Engineering': { total: 0, attended: 0 },
   }
 };
 

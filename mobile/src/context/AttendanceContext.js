@@ -3,6 +3,11 @@ import {
   submitSession,
   subscribeStudentAttendance,
   subscribeStudentNotifications,
+  subscribeCollegeConfig,
+  subscribeCollegeTimetables,
+  subscribeTeacherAllSessions,
+  subscribeStudentsBySection,
+  subscribeSubjectSectionAttendance,
   markNotificationRead as firestoreMarkRead,
 } from '../firebase/attendanceService';
 import { useAuth } from './AuthContext';
@@ -17,14 +22,96 @@ export const AttendanceProvider = ({ children }) => {
   const [localSessions, setLocalSessions] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
-  // For student: live Firestore data
+  // For teacher: live Firestore sessions (all sessions ever submitted by this teacher)
+  const [liveTeacherSessions, setLiveTeacherSessions] = useState([]);
+
+  // For student & teacher: live Firestore data
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [timetables, setTimetables] = useState([]);
+  const [collegeConfig, setCollegeConfig] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // For teacher analysis: real students from Firestore
+  // key: section string → value: array of student user objects
+  const [sectionStudentsCache, setSectionStudentsCache] = useState({});
+  // For teacher analysis: attendance records per subject+section
+  // key: 'subject||section' → array of attendance records
+  const [subjectAttendanceCache, setSubjectAttendanceCache] = useState({});
 
   // Subscription cleanup refs
   const unsubAttRef = useRef(null);
   const unsubNotifRef = useRef(null);
+  const unsubConfigRef = useRef(null);
+  const unsubTTRef = useRef(null);
+  const unsubTeacherSessionsRef = useRef(null);
+  // Dynamic section/subject listeners cleanup
+  const sectionSubRefs = useRef({});
+  const subjectAttSubRefs = useRef({});
+
+  const collegeCode = user?.selectedCollegeCode || user?.collegeCode || 'VJIT';
+
+  // Live subscription to collegeConfig & timetables for all users
+  useEffect(() => {
+    if (!collegeCode) return;
+
+    unsubConfigRef.current = subscribeCollegeConfig(collegeCode, (cfg) => {
+      setCollegeConfig(cfg);
+    });
+
+    unsubTTRef.current = subscribeCollegeTimetables(collegeCode, (list) => {
+      setTimetables(list);
+    });
+
+    return () => {
+      if (unsubConfigRef.current) { unsubConfigRef.current(); unsubConfigRef.current = null; }
+      if (unsubTTRef.current) { unsubTTRef.current(); unsubTTRef.current = null; }
+    };
+  }, [collegeCode]);
+
+  // Live Firestore sessions for teacher (all submitted, not just local)
+  useEffect(() => {
+    if (user?.role !== 'teacher' || !user?.uid) {
+      setLiveTeacherSessions([]);
+      return;
+    }
+    if (unsubTeacherSessionsRef.current) unsubTeacherSessionsRef.current();
+    unsubTeacherSessionsRef.current = subscribeTeacherAllSessions(user.uid, (sessions) => {
+      setLiveTeacherSessions(sessions);
+    });
+    return () => {
+      if (unsubTeacherSessionsRef.current) { unsubTeacherSessionsRef.current(); unsubTeacherSessionsRef.current = null; }
+    };
+  }, [user?.uid, user?.role]);
+
+  /**
+   * Teacher: subscribe to all students in a section (on-demand, cached).
+   * Caller passes section string; returns unsubscribe.
+   */
+  const subscribeToSection = useCallback((section) => {
+    if (!section) return () => {};
+    const collegeCode = user?.selectedCollegeCode || user?.collegeCode || 'VJIT';
+    if (sectionSubRefs.current[section]) return () => {}; // already subscribed
+    const unsub = subscribeStudentsBySection(collegeCode, section, (students) => {
+      setSectionStudentsCache(prev => ({ ...prev, [section]: students }));
+    });
+    sectionSubRefs.current[section] = unsub;
+    return unsub;
+  }, [user]);
+
+  /**
+   * Teacher: subscribe to all attendance records for a subject+section combo.
+   */
+  const subscribeToSubjectAttendance = useCallback((subject, section) => {
+    if (!subject || !section) return () => {};
+    const key = `${subject}||${section}`;
+    if (subjectAttSubRefs.current[key]) return () => {}; // already subscribed
+    const unsub = subscribeSubjectSectionAttendance(subject, section, (records) => {
+      setSubjectAttendanceCache(prev => ({ ...prev, [key]: records }));
+    });
+    subjectAttSubRefs.current[key] = unsub;
+    return unsub;
+  }, []);
 
   // When student logs in → subscribe to their Firestore data
   useEffect(() => {
@@ -139,8 +226,16 @@ export const AttendanceProvider = ({ children }) => {
     <AttendanceContext.Provider value={{
       // Teacher
       sessions: localSessions,
+      liveTeacherSessions,
+      sectionStudentsCache,
+      subjectAttendanceCache,
+      subscribeToSection,
+      subscribeToSubjectAttendance,
       submitAttendance,
       submitting,
+      // Timetable & Config
+      timetables,
+      collegeConfig,
       // Student
       loading,
       attendanceRecords,

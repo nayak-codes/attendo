@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput } from 'react-native';
 import HeaderBar from '../components/HeaderBar';
 import BottomNavBar from '../components/BottomNavBar';
 import { useAuth } from '../context/AuthContext';
 import { useAttendance } from '../context/AttendanceContext';
 import { useTheme } from '../context/ThemeContext';
-import { MOCK_SUBJECTS, MOCK_SESSIONS, MOCK_SECTIONS, MOCK_YEARS } from '../data/mockData';
+import { MOCK_SUBJECTS, MOCK_SESSIONS, MOCK_YEARS } from '../data/mockData';
 
 const today = new Date().toISOString().split('T')[0];
 
@@ -18,69 +18,90 @@ function buildDynamicFacultyTimetable(assignedSubjects = [], assignedSections = 
 
   const slotsPool = [
     { time: '09:00 AM - 10:00 AM', room: 'LH 105' },
-    { time: '11:15 AM - 12:15 PM', room: 'LH 106' },
-    { time: '02:00 PM - 04:00 PM', room: 'CS Lab 2' }
+    { time: '10:00 AM - 11:00 AM', room: 'LH 108' },
+    { time: '11:15 AM - 12:15 PM', room: 'LH 202' },
+    { time: '02:00 PM - 03:00 PM', room: 'Lab 3' },
+    { time: '03:00 PM - 04:00 PM', room: 'LH 105' },
   ];
 
-  return WEEK_DAYS.map((dayName, dayIdx) => {
-    const classCount = dayIdx % 2 === 0 ? 3 : 2;
-    const classes = [];
+  return WEEK_DAYS.map((day, dIdx) => {
+    const s1 = subjs[dIdx % subjs.length];
+    const s2 = subjs[(dIdx + 1) % subjs.length];
+    const sec1 = secs[dIdx % secs.length];
+    const sec2 = secs[(dIdx + 1) % secs.length];
 
-    for (let c = 0; c < classCount; c++) {
-      const slot = slotsPool[c];
-      const subj = subjs[(dayIdx + c) % subjs.length];
-      const secLetter = secs[(dayIdx + c) % secs.length];
-      const fullSecName = String(secLetter).toUpperCase().startsWith('CSE')
-        ? String(secLetter)
-        : `CSE 3-${secLetter}`;
-
-      let classStatus = 'scheduled';
-      let statsText = 'Scheduled';
-      if (c === 0) {
-        classStatus = 'completed';
-        statsText = '✓ Class Finished';
-      } else if (c === 1) {
-        classStatus = 'next';
-        statsText = '⏱️ Next Session';
-      }
-
-      classes.push({
-        time: slot.time,
-        subject: c === 2 && !subj.toLowerCase().includes('lab') ? `${subj} Lab` : subj,
-        rawSubject: subj,
-        classSec: fullSecName,
-        rawSec: secLetter,
-        room: c === 2 ? `Lab ${c + 1}` : slot.room,
-        status: classStatus,
-        stats: statsText,
-      });
-    }
-
-    return { day: dayName, classes };
+    return {
+      day,
+      classes: [
+        {
+          time: slotsPool[0].time,
+          subject: s1,
+          rawSubject: s1,
+          classSec: `CSE 3-${sec1}`,
+          rawSec: sec1,
+          room: slotsPool[0].room,
+          status: dIdx % 2 === 0 ? 'completed' : 'scheduled',
+          stats: dIdx % 2 === 0 ? '38/42 Present' : 'Scheduled',
+        },
+        {
+          time: slotsPool[1].time,
+          subject: `${s2} Lab`,
+          rawSubject: s2,
+          classSec: `CSE 3-${sec2}`,
+          rawSec: sec2,
+          room: slotsPool[3].room,
+          status: dIdx === 1 ? 'next' : 'scheduled',
+          stats: dIdx === 1 ? 'Next Up' : 'Scheduled',
+        },
+        {
+          time: slotsPool[2].time,
+          subject: `${s1} Mentorship`,
+          rawSubject: s1,
+          classSec: `CSE 3-${sec1}`,
+          rawSec: sec1,
+          room: slotsPool[2].room,
+          status: 'scheduled',
+          stats: 'Scheduled',
+        },
+      ]
+    };
   });
 }
 
 export default function TeacherDashboardScreen({ onNavigate }) {
   const { user, logout } = useAuth();
-  const { sessions } = useAttendance();
+  const {
+    sessions,
+    liveTeacherSessions,
+    sectionStudentsCache,
+    subjectAttendanceCache,
+    subscribeToSection,
+    subscribeToSubjectAttendance,
+    timetables,
+    collegeConfig,
+  } = useAttendance();
   const { colors, themeMode, toggleTheme } = useTheme();
 
   // Derive assigned sections & subjects dynamically for logged in teacher
-  const assignedSections = user?.assignedSections && user.assignedSections.length > 0
-    ? user.assignedSections
-    : user?.sections && user.sections.length > 0
-    ? user.sections
-    : user?.section
-    ? (Array.isArray(user.section) 
-        ? user.section 
-        : String(user.section).replace(/CSE\s*\d*-?/gi, '').split(/[\s,]+/).filter(Boolean))
-    : ['A', 'B'];
+  const assignedSections = useMemo(() => {
+    return user?.assignedSections && user.assignedSections.length > 0
+      ? user.assignedSections
+      : user?.sections && user.sections.length > 0
+      ? user.sections
+      : user?.section
+      ? (Array.isArray(user.section) 
+          ? user.section 
+          : String(user.section).replace(/CSE\s*\d*-?/gi, '').split(/[\s,]+/).filter(Boolean))
+      : ['A', 'B'];
+  }, [user]);
 
-  const assignedSubjects = user?.assignedSubjects && user.assignedSubjects.length > 0
-    ? user.assignedSubjects
-    : user?.subject
-    ? (Array.isArray(user.subject) ? user.subject : [user.subject])
-    : ['Operating Systems', 'Data Structures'];
+  const assignedSubjects = useMemo(() => {
+    return user?.assignedSubjects && user.assignedSubjects.length > 0
+      ? user.assignedSubjects
+      : user?.subject
+      ? (Array.isArray(user.subject) ? user.subject : [user.subject])
+      : ['Operating Systems', 'Data Structures'];
+  }, [user]);
 
   const [activeBottomTab, setActiveBottomTab] = useState('home');
 
@@ -107,12 +128,6 @@ export default function TeacherDashboardScreen({ onNavigate }) {
   const activeTodayName = currentRealDay === 'Sunday' ? 'Monday' : currentRealDay;
 
   const [selectedScheduleDay, setSelectedScheduleDay] = useState(activeTodayName);
-
-  // Dynamic Weekly Schedule generated from assigned subjects & assigned sections
-  const dynamicWeeklySchedule = buildDynamicFacultyTimetable(assignedSubjects, assignedSections);
-  const [timetableData, setTimetableData] = useState(dynamicWeeklySchedule);
-
-  // Editable Timetable State for Coordinator / Mentor Access
   const [showEditTtModal, setShowEditTtModal] = useState(false);
   const [editTtForm, setEditTtForm] = useState({
     day: 'Monday',
@@ -122,8 +137,75 @@ export default function TeacherDashboardScreen({ onNavigate }) {
     room: 'LH 105',
   });
 
+  // Dynamic Weekly Schedule generated from assigned subjects & assigned sections OR Firestore Timetables
+  const dynamicWeeklySchedule = buildDynamicFacultyTimetable(assignedSubjects, assignedSections);
+
+  // Derive live schedule from Firestore timetables if available
+  const liveFirestoreSchedule = React.useMemo(() => {
+    if (!timetables || timetables.length === 0) return dynamicWeeklySchedule;
+    
+    const cfg = collegeConfig || { startTime: '09:00', periodsPerDay: 7, periodDuration: 50, hasLunchBreak: true, lunchAfterPeriod: 4, lunchDuration: 45 };
+    const timelineMap = {};
+    let current = cfg.startTime || '09:00';
+
+    const addMins = (t, mins) => {
+      if (!t) return '';
+      const [h, m] = t.split(':').map(Number);
+      const total = h * 60 + m + mins;
+      const newH = Math.floor(total / 60) % 24;
+      const newM = total % 60;
+      return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
+    };
+
+    for (let i = 1; i <= (cfg.periodsPerDay || 7); i++) {
+      const end = addMins(current, cfg.periodDuration || 50);
+      timelineMap[i] = `${current} - ${end}`;
+      current = end;
+      if (cfg.hasLunchBreak && i === cfg.lunchAfterPeriod) {
+        current = addMins(current, cfg.lunchDuration || 45);
+      }
+    }
+
+    let hasCustom = false;
+    const res = WEEK_DAYS.map(dayName => {
+      const classes = [];
+      timetables.forEach(tt => {
+        const secName = tt.section || 'A';
+        const schedule = tt.schedule || {};
+        const dayCells = schedule[dayName] || [];
+        dayCells.forEach(cell => {
+          const isMyClass = (
+            (cell.teacherId && (cell.teacherId === user?.id || cell.teacherId === user?.uid || cell.teacherId === user?.collegeId)) ||
+            (cell.teacherName && user?.name && cell.teacherName.toLowerCase().trim() === user.name.toLowerCase().trim()) ||
+            (assignedSubjects.includes(cell.subject))
+          );
+          if (isMyClass && cell.subject) {
+            hasCustom = true;
+            classes.push({
+              time: timelineMap[cell.period] || `Period ${cell.period}`,
+              subject: cell.subject,
+              rawSubject: cell.subject,
+              classSec: secName,
+              rawSec: secName,
+              room: `LH ${100 + (cell.period || 1)}`,
+              status: 'scheduled',
+              stats: 'Scheduled',
+            });
+          }
+        });
+      });
+      return { day: dayName, classes };
+    });
+
+    return hasCustom ? res : dynamicWeeklySchedule;
+  }, [timetables, collegeConfig, user, assignedSubjects, assignedSections]);
+
+  const [timetableData, setTimetableData] = useState(dynamicWeeklySchedule);
+
+  const activeScheduleData = (timetables && timetables.length > 0) ? liveFirestoreSchedule : timetableData;
+
   // Current active day schedule classes
-  const activeDaySchedule = (timetableData.find(d => d.day === selectedScheduleDay) || dynamicWeeklySchedule.find(d => d.day === selectedScheduleDay))?.classes || [];
+  const activeDaySchedule = (activeScheduleData.find(d => d.day === selectedScheduleDay) || dynamicWeeklySchedule.find(d => d.day === selectedScheduleDay))?.classes || [];
 
   const handleMarkAttendanceForClass = (cls) => {
     setForm(prev => ({
@@ -161,34 +243,99 @@ export default function TeacherDashboardScreen({ onNavigate }) {
     (acc, s) => acc + (s.attendance?.filter(a => a.status === 'present').length || 0), 0
   );
 
+  const teacherTotalSessions = sessions.length;
+  const teacherTotalStudentsMarked = sessions.reduce((acc, s) => acc + (s.attendance?.length || 0), 0);
+  const teacherTotalPresentMarked = sessions.reduce((acc, s) => acc + (s.attendance?.filter(a => a.status === 'present').length || 0), 0);
+  const teacherAvgPct = teacherTotalStudentsMarked > 0 ? Math.round((teacherTotalPresentMarked / teacherTotalStudentsMarked) * 100) : 0;
+
   const greetHour = new Date().getHours();
   const greeting = greetHour < 12 ? 'Good Morning' : greetHour < 17 ? 'Good Afternoon' : 'Good Evening';
 
-  // Mock Analysis Dataset for Students across Sections
-  const ANALYSIS_MOCK_STUDENTS = [
-    { id: 'S001', name: 'Arjun Reddy', rollNo: 'CE21001', attended: 18, total: 20, section: 'A' },
-    { id: 'S002', name: 'Priya Sharma', rollNo: 'CE21002', attended: 19, total: 20, section: 'A' },
-    { id: 'S003', name: 'Rahul Verma', rollNo: 'CE21003', attended: 10, total: 20, section: 'A' },
-    { id: 'S004', name: 'Sneha Patel', rollNo: 'CE21004', attended: 14, total: 20, section: 'A' },
-    { id: 'S005', name: 'Karan Singh', rollNo: 'CE21005', attended: 8, total: 20, section: 'A' },
-    { id: 'S006', name: 'Divya Nair', rollNo: 'CE21006', attended: 17, total: 20, section: 'B' },
-    { id: 'S007', name: 'Vikram Rao', rollNo: 'CE21007', attended: 11, total: 20, section: 'B' },
-    { id: 'S008', name: 'Anjali Gupta', rollNo: 'CE21008', attended: 19, total: 20, section: 'B' },
-    { id: 'S009', name: 'Rohit Kumar', rollNo: 'CE21009', attended: 9, total: 20, section: 'B' },
-    { id: 'S010', name: 'Meera Iyer', rollNo: 'CE21010', attended: 20, total: 20, section: 'B' },
-    { id: 'S011', name: 'Aditya Joshi', rollNo: 'CE21011', attended: 13, total: 20, section: 'C' },
-    { id: 'S012', name: 'Pooja Mehta', rollNo: 'CE21012', attended: 18, total: 20, section: 'C' },
-    { id: 'S013', name: 'Suresh Babu', rollNo: 'CE21013', attended: 7, total: 20, section: 'C' },
-    { id: 'S014', name: 'Kavitha Rao', rollNo: 'CE21014', attended: 16, total: 20, section: 'C' },
-    { id: 'S015', name: 'Nikhil Sharma', rollNo: 'CE21015', attended: 12, total: 20, section: 'C' },
-  ];
+  // ─── Pre-subscribe to ALL assigned sections for Home tab student count ────────
+  useEffect(() => {
+    assignedSections.forEach(sec => subscribeToSection(sec));
+  }, [assignedSections, subscribeToSection]);
 
-  // Filter students for selected section
-  const sectionStudents = ANALYSIS_MOCK_STUDENTS.filter(s => s.section === analysisSection);
-  const totalClasses = 20;
+  // ─── Analysis tab: subscribe to real Firestore students + attendance ──────────
+  // Trigger subscription whenever the selected section OR subject changes
+  useEffect(() => {
+    subscribeToSection(analysisSection);
+    subscribeToSubjectAttendance(analysisSubject, analysisSection);
+    // Listeners are deduplicated and cached inside AttendanceContext — no unsub needed
+  }, [analysisSection, analysisSubject, subscribeToSection, subscribeToSubjectAttendance]);
 
-  const lowAttendanceStudents = sectionStudents.filter(s => (s.attended / totalClasses) < 0.75);
-  const safeAttendanceStudents = sectionStudents.filter(s => (s.attended / totalClasses) >= 0.75);
+  // Real students from Firestore for selected section
+  const firestoreSectionStudents = sectionStudentsCache[analysisSection] || [];
+
+  // Real attendance records from Firestore for selected subject+section
+  const attKey = `${analysisSubject}||${analysisSection}`;
+  const subjectAttRecords = subjectAttendanceCache[attKey] || [];
+
+  // Also use liveTeacherSessions to count class sessions held
+  const matchingSessions = useMemo(() => {
+    // Merge local (just-submitted) + live Firestore sessions, dedup by id
+    const all = [...liveTeacherSessions, ...sessions];
+    const seen = new Set();
+    return all.filter(s => {
+      if (seen.has(s.id)) return false;
+      seen.add(s.id);
+      const subMatch = !analysisSubject || (s.subject && s.subject.toLowerCase().trim() === analysisSubject.toLowerCase().trim());
+      const secMatch = !analysisSection || (s.section && s.section.toLowerCase().trim() === analysisSection.toLowerCase().trim());
+      return subMatch && secMatch;
+    });
+  }, [liveTeacherSessions, sessions, analysisSubject, analysisSection]);
+
+  const totalClasses = matchingSessions.length;
+
+  // Build per-student attendance map from Firestore attendance records
+  const firestoreAttMap = useMemo(() => {
+    const map = {};
+    subjectAttRecords.forEach(rec => {
+      const key = rec.rollNo || rec.studentId || rec.name || 'unknown';
+      if (!map[key]) map[key] = { attended: 0, total: 0 };
+      map[key].total += 1;
+      if (rec.status === 'present') map[key].attended += 1;
+    });
+    return map;
+  }, [subjectAttRecords]);
+
+  // Build sectionStudents: prefer real Firestore students, fallback to students found in attendance records
+  const sectionStudents = useMemo(() => {
+    let studentList = firestoreSectionStudents;
+
+    // If no Firestore students yet, synthesize from attendance records (shows students who've had attendance marked)
+    if (studentList.length === 0 && subjectAttRecords.length > 0) {
+      const seen = new Set();
+      studentList = subjectAttRecords
+        .filter(r => {
+          const k = r.rollNo || r.name;
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        })
+        .map(r => ({ id: r.studentId || r.rollNo, name: r.name, rollNo: r.rollNo, section: analysisSection }));
+    }
+
+    return studentList.map(st => {
+      const key = st.rollNo || st.name || 'unknown';
+      const firestoreAtt = firestoreAttMap[key];
+      if (firestoreAtt) {
+        return { ...st, total: firestoreAtt.total, attended: firestoreAtt.attended };
+      }
+      // Fallback: count from local sessions
+      let attCount = 0;
+      matchingSessions.forEach(sess => {
+        const rec = (sess.attendance || []).find(a =>
+          a.rollNo === st.rollNo || (a.name && a.name.toLowerCase() === (st.name || '').toLowerCase())
+        );
+        if (rec && rec.status === 'present') attCount++;
+      });
+      return { ...st, total: totalClasses, attended: attCount };
+    });
+  }, [firestoreSectionStudents, subjectAttRecords, firestoreAttMap, matchingSessions, totalClasses, analysisSection]);
+
+  const lowAttendanceStudents = sectionStudents.filter(s => s.total > 0 && (s.attended / s.total) < 0.75);
+  const safeAttendanceStudents = sectionStudents.filter(s => s.total > 0 && (s.attended / s.total) >= 0.75);
 
   const displayedStudents = analysisFilter === 'low'
     ? lowAttendanceStudents
@@ -196,8 +343,13 @@ export default function TeacherDashboardScreen({ onNavigate }) {
     ? safeAttendanceStudents
     : sectionStudents;
 
-  const classAvgPct = sectionStudents.length > 0
-    ? Math.round((sectionStudents.reduce((sum, s) => sum + (s.attended / totalClasses) * 100, 0)) / sectionStudents.length)
+  const classAvgPct = (sectionStudents.length > 0)
+    ? Math.round(
+        sectionStudents.reduce((sum, s) => {
+          const pct = s.total > 0 ? (s.attended / s.total) * 100 : 0;
+          return sum + pct;
+        }, 0) / sectionStudents.length
+      )
     : 0;
 
   const handleSendAlert = (studentId, studentName) => {
@@ -265,7 +417,9 @@ export default function TeacherDashboardScreen({ onNavigate }) {
 
                 <View style={[styles.statCard, { borderColor: colors.borderSubtle, backgroundColor: colors.bgGlass }]}>
                   <Text style={styles.statIcon}>👥</Text>
-                  <Text style={[styles.statNum, { color: colors.textPrimary }]}>180</Text>
+                  <Text style={[styles.statNum, { color: colors.textPrimary }]}>
+                    {assignedSections.reduce((total, sec) => total + (sectionStudentsCache[sec]?.length || 0), 0) || '—'}
+                  </Text>
                   <Text style={[styles.statLbl, { color: colors.textMuted }]}>Assigned Students</Text>
                 </View>
               </View>
@@ -628,33 +782,51 @@ export default function TeacherDashboardScreen({ onNavigate }) {
                 👥 Roster Breakdown for {analysisSubject} (Sec {analysisSection})
               </Text>
 
-              {displayedStudents.map((st) => {
-                const pct = Math.round((st.attended / totalClasses) * 100);
-                const isLow = pct < 75;
+              {displayedStudents.length === 0 ? (
+                <View style={{ alignItems: 'center', paddingVertical: 32, gap: 8 }}>
+                  <Text style={{ fontSize: 32 }}>
+                    {firestoreSectionStudents.length === 0 ? '📂' : '🔍'}
+                  </Text>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' }}>
+                    {firestoreSectionStudents.length === 0
+                      ? 'No Students Registered in Sec ' + analysisSection
+                      : analysisFilter === 'low' ? 'No Low Attendance Students! 🎉' : 'No Safe Attendance Students'}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: colors.textMuted, textAlign: 'center', paddingHorizontal: 20 }}>
+                    {firestoreSectionStudents.length === 0
+                      ? 'Students need to register with section "' + analysisSection + '" to appear here.'
+                      : 'Try switching filter tabs above.'}
+                  </Text>
+                </View>
+              ) : (
+              displayedStudents.map((st) => {
+                const stTotal = st.total || 0;
+                const pct = stTotal > 0 ? Math.round((st.attended / stTotal) * 100) : 0;
+                const isLow = stTotal > 0 && pct < 75;
                 const isAlertSent = alertSentMap[st.id];
 
                 return (
-                  <View key={st.id} style={[styles.studentAnalysisRow, { borderBottomColor: colors.borderSubtle }]}>
+                  <View key={st.id || st.rollNo} style={[styles.studentAnalysisRow, { borderBottomColor: colors.borderSubtle }]}>
                     {/* Left Avatar & Info */}
                     <View style={styles.studentAnalysisLeft}>
                       <View style={[
                         styles.studentInitCircle,
-                        { backgroundColor: isLow ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)' }
+                        { backgroundColor: stTotal === 0 ? colors.bgGlass : isLow ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)' }
                       ]}>
-                        <Text style={[styles.studentInitText, { color: isLow ? colors.absent : colors.present }]}>
-                          {st.name.charAt(0)}
+                        <Text style={[styles.studentInitText, { color: stTotal === 0 ? colors.textMuted : isLow ? colors.absent : colors.present }]}>
+                          {(st.name || '?').charAt(0).toUpperCase()}
                         </Text>
                       </View>
 
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.studentAnalysisName, { color: colors.textPrimary }]}>{st.name}</Text>
-                        <Text style={[styles.studentAnalysisRoll, { color: colors.textMuted }]}>{st.rollNo} • Sec {st.section}</Text>
+                        <Text style={[styles.studentAnalysisName, { color: colors.textPrimary }]}>{st.name || 'Unknown'}</Text>
+                        <Text style={[styles.studentAnalysisRoll, { color: colors.textMuted }]}>{st.rollNo || 'N/A'} • Sec {st.section || analysisSection}</Text>
 
                         {/* Progress bar */}
                         <View style={[styles.progressBarBg, { backgroundColor: colors.bgGlass }]}>
                           <View style={[
                             styles.progressBarFill,
-                            { width: `${pct}%`, backgroundColor: isLow ? colors.absent : colors.present }
+                            { width: `${pct}%`, backgroundColor: stTotal === 0 ? colors.textMuted : isLow ? colors.absent : colors.present }
                           ]} />
                         </View>
                       </View>
@@ -663,15 +835,15 @@ export default function TeacherDashboardScreen({ onNavigate }) {
                     {/* Right Stats & Action */}
                     <View style={styles.studentAnalysisRight}>
                       <Text style={[styles.attendedCountTxt, { color: colors.textPrimary }]}>
-                        {st.attended} / {totalClasses} <Text style={{ fontSize: 10, color: colors.textMuted }}>Classes</Text>
+                        {st.attended} / {stTotal} <Text style={{ fontSize: 10, color: colors.textMuted }}>Classes</Text>
                       </Text>
 
                       <View style={[
                         styles.pctBadge,
-                        { backgroundColor: isLow ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)' }
+                        { backgroundColor: stTotal === 0 ? colors.bgGlass : isLow ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)' }
                       ]}>
-                        <Text style={[styles.pctBadgeTxt, { color: isLow ? colors.absent : colors.present }]}>
-                          {pct}% {isLow ? '⚠️ Low' : '🟢 Safe'}
+                        <Text style={[styles.pctBadgeTxt, { color: stTotal === 0 ? colors.textMuted : isLow ? colors.absent : colors.present }]}>
+                          {stTotal === 0 ? 'No class yet' : `${pct}% ${isLow ? '⚠️ Low' : '🟢 Safe'}`}
                         </Text>
                       </View>
 
@@ -682,7 +854,7 @@ export default function TeacherDashboardScreen({ onNavigate }) {
                               styles.sendAlertBtn,
                               isAlertSent ? { backgroundColor: colors.bgGlass, borderColor: colors.borderSubtle } : { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderColor: 'rgba(239, 68, 68, 0.4)' }
                             ]}
-                            onPress={() => handleSendAlert(st.id, st.name)}
+                            onPress={() => handleSendAlert(st.id || st.rollNo, st.name)}
                             disabled={isAlertSent}
                           >
                             <Text style={[styles.sendAlertBtnText, { color: isAlertSent ? colors.textMuted : colors.absent }]}>
@@ -704,7 +876,8 @@ export default function TeacherDashboardScreen({ onNavigate }) {
                     </View>
                   </View>
                 );
-              })}
+              })
+              )}
             </View>
           </View>
         )}
@@ -786,8 +959,8 @@ export default function TeacherDashboardScreen({ onNavigate }) {
                 <View style={[styles.onlineDot, { backgroundColor: colors.present }]} />
               </View>
 
-              <Text style={[styles.bigName, { color: colors.textPrimary }]}>{user?.name || 'Dr. Ramesh Kumar'}</Text>
-              <Text style={[styles.bigRoll, { color: colors.accentBlue }]}>Senior Instructor • ID: {user?.collegeId || user?.uid || 'VJIT-T-001'}</Text>
+              <Text style={[styles.bigName, { color: colors.textPrimary }]}>{user?.name || 'Faculty Member'}</Text>
+              <Text style={[styles.bigRoll, { color: colors.accentBlue }]}>Senior Instructor • ID: {user?.collegeId || user?.uid || 'FACULTY-001'}</Text>
 
               {/* Verified & Server Pill */}
               <View style={styles.badgeRow}>
@@ -802,12 +975,12 @@ export default function TeacherDashboardScreen({ onNavigate }) {
               {/* Quick Stat KPI Metric Strip */}
               <View style={[styles.profileStatStrip, { backgroundColor: colors.bgGlass, borderColor: colors.borderSubtle }]}>
                 <View style={styles.profileStatItem}>
-                  <Text style={[styles.profileStatNum, { color: colors.accentBlue }]}>124</Text>
+                  <Text style={[styles.profileStatNum, { color: colors.accentBlue }]}>{teacherTotalSessions}</Text>
                   <Text style={[styles.profileStatLbl, { color: colors.textMuted }]}>Classes Taken</Text>
                 </View>
                 <View style={[styles.profileStatDivider, { backgroundColor: colors.borderSubtle }]} />
                 <View style={styles.profileStatItem}>
-                  <Text style={[styles.profileStatNum, { color: colors.present }]}>88.5%</Text>
+                  <Text style={[styles.profileStatNum, { color: colors.present }]}>{teacherAvgPct}%</Text>
                   <Text style={[styles.profileStatLbl, { color: colors.textMuted }]}>Avg Attendance</Text>
                 </View>
                 <View style={[styles.profileStatDivider, { backgroundColor: colors.borderSubtle }]} />
@@ -829,22 +1002,22 @@ export default function TeacherDashboardScreen({ onNavigate }) {
 
               <View style={[styles.infoRow, { borderBottomColor: colors.borderSubtle }]}>
                 <Text style={[styles.infoLbl, { color: colors.textMuted }]}>Primary Subjects</Text>
-                <Text style={[styles.infoVal, { color: colors.textPrimary }]}>{user?.subject || 'Data Structures, Operating Systems'}</Text>
+                <Text style={[styles.infoVal, { color: colors.textPrimary }]}>{user?.subject ? (Array.isArray(user.subject) ? user.subject.join(', ') : user.subject) : assignedSubjects.join(', ')}</Text>
               </View>
 
               <View style={[styles.infoRow, { borderBottomColor: colors.borderSubtle }]}>
                 <Text style={[styles.infoLbl, { color: colors.textMuted }]}>Assigned Sections</Text>
-                <Text style={[styles.infoVal, { color: colors.accentBlue, fontWeight: '700' }]}>CSE 3-A, CSE 3-B, CSE 2-C</Text>
+                <Text style={[styles.infoVal, { color: colors.accentBlue, fontWeight: '700' }]}>{assignedSections.map(s => String(s).toUpperCase().startsWith('CSE') ? s : `CSE 3-${s}`).join(', ')}</Text>
               </View>
 
               <View style={[styles.infoRow, { borderBottomColor: colors.borderSubtle }]}>
                 <Text style={[styles.infoLbl, { color: colors.textMuted }]}>Official Email</Text>
-                <Text style={[styles.infoVal, { color: colors.textPrimary }]}>{(user?.collegeId || 'ramesh').toLowerCase()}@{(user?.selectedCollegeCode || 'vjit').toLowerCase()}.edu.in</Text>
+                <Text style={[styles.infoVal, { color: colors.textPrimary }]}>{(user?.collegeId || user?.name || 'faculty').toLowerCase().replace(/\s+/g, '')}@{(user?.selectedCollegeCode || 'vjit').toLowerCase()}.edu.in</Text>
               </View>
 
               <View style={[styles.infoRow, { borderBottomColor: colors.borderSubtle }]}>
                 <Text style={[styles.infoLbl, { color: colors.textMuted }]}>Contact Phone</Text>
-                <Text style={[styles.infoVal, { color: colors.textPrimary }]}>+91 98765 43210</Text>
+                <Text style={[styles.infoVal, { color: colors.textPrimary }]}>{user?.phone || '+91 98765 43210'}</Text>
               </View>
 
               <View style={[styles.infoRow, { borderBottomColor: colors.borderSubtle }]}>

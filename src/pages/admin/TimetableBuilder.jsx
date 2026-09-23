@@ -36,8 +36,8 @@ const buildTimeline = (config) => {
   return slots;
 };
 
-const TimetableBuilder = ({ adminCollegeCode, sections, teachers }) => {
-  const [selectedSection, setSelectedSection] = useState('');
+const TimetableBuilder = ({ adminCollegeCode, sections = [], teachers = [], initialSection }) => {
+  const [selectedSectionObj, setSelectedSectionObj] = useState(null);
   const [config, setConfig] = useState(null);
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -65,6 +65,41 @@ const TimetableBuilder = ({ adminCollegeCode, sections, teachers }) => {
     setTimeout(() => setToastMsg(''), 4000);
   };
 
+  // Helper to build unique timetable ID per department + year + sectionLetter
+  const getTtId = (sec) => {
+    if (!sec) return '';
+    if (typeof sec === 'object') {
+      if (sec.id) return sec.id;
+      const yr = (sec.year || '').replace(/\s/g, '');
+      return `${adminCollegeCode}_${sec.department}_${yr}_${sec.sectionLetter}`;
+    }
+    return `${adminCollegeCode}_${String(sec).replace(/[\s-]/g, '_')}`;
+  };
+
+  // Auto-select initialSection or first section
+  useEffect(() => {
+    if (sections && sections.length > 0) {
+      if (initialSection) {
+        const initialName = typeof initialSection === 'object' ? initialSection.displayName : initialSection;
+        const initialYear = typeof initialSection === 'object' ? initialSection.year : null;
+        const initialId = typeof initialSection === 'object' ? initialSection.id : initialSection;
+
+        const match = sections.find(s =>
+          s.id === initialId ||
+          (s.displayName === initialName && (!initialYear || s.year === initialYear)) ||
+          s.displayName === initialName
+        );
+        if (match) {
+          setSelectedSectionObj(match);
+          return;
+        }
+      }
+      if (!selectedSectionObj || !sections.some(s => s.id === selectedSectionObj.id)) {
+        setSelectedSectionObj(sections[0]);
+      }
+    }
+  }, [initialSection, sections]);
+
   // Load college config from Firestore
   useEffect(() => {
     if (!adminCollegeCode) return;
@@ -88,17 +123,17 @@ const TimetableBuilder = ({ adminCollegeCode, sections, teachers }) => {
 
   // Load timetable when section changes
   useEffect(() => {
-    if (!selectedSection || !adminCollegeCode) return;
-    const ttId = `${adminCollegeCode}_${selectedSection.replace(/[\s-]/g, '_')}`;
+    if (!selectedSectionObj || !adminCollegeCode) return;
+    const ttId = getTtId(selectedSectionObj);
     const unsub = onSnapshot(doc(db, 'timetables', ttId), (snap) => {
-      if (snap.exists()) {
+      if (snap.exists() && snap.data()?.schedule) {
         setTimetable(snap.data().schedule || {});
       } else {
         setTimetable({});
       }
     });
     return () => unsub();
-  }, [selectedSection, adminCollegeCode]);
+  }, [selectedSectionObj, adminCollegeCode]);
 
   // Collect subjects from teachers
   useEffect(() => {
@@ -126,7 +161,11 @@ const TimetableBuilder = ({ adminCollegeCode, sections, teachers }) => {
   };
 
   const getCell = (day, periodNum) => {
-    return timetable[day]?.find(c => c.period === periodNum) || null;
+    if (!timetable || !timetable[day]) return null;
+    if (Array.isArray(timetable[day])) {
+      return timetable[day].find(c => c.period === periodNum || Number(c.period) === Number(periodNum)) || null;
+    }
+    return timetable[`${day}_${periodNum}`] || null;
   };
 
   const handleCellClick = (day, period) => {
@@ -145,7 +184,7 @@ const TimetableBuilder = ({ adminCollegeCode, sections, teachers }) => {
   };
 
   const handleSaveCell = async () => {
-    if (!cellModal) return;
+    if (!cellModal || !selectedSectionObj) return;
     const { day, period, subject, teacherId, teacherName } = cellModal;
 
     const newTimetable = { ...timetable };
@@ -165,34 +204,72 @@ const TimetableBuilder = ({ adminCollegeCode, sections, teachers }) => {
 
     setTimetable(newTimetable);
     setCellModal(null);
-  };
 
-  const handleSaveTimetable = async () => {
-    if (!selectedSection) return;
-    setIsSubmitting(true);
-    const ttId = `${adminCollegeCode}_${selectedSection.replace(/[\s-]/g, '_')}`;
+    // Live sync to Firestore with unique section ID
+    const ttId = getTtId(selectedSectionObj);
     try {
       await setDoc(doc(db, 'timetables', ttId), {
         collegeCode: adminCollegeCode,
-        section: selectedSection,
+        section: selectedSectionObj.displayName,
+        year: selectedSectionObj.year,
+        department: selectedSectionObj.department,
+        sectionId: selectedSectionObj.id,
+        schedule: newTimetable,
+        updatedAt: new Date().toISOString(),
+      });
+      triggerToast(`⚡ Live updated P${period} (${day}) for ${selectedSectionObj.displayName} (${selectedSectionObj.year})!`);
+    } catch (err) {
+      console.warn('Live save error:', err);
+    }
+  };
+
+  const handleSaveTimetable = async () => {
+    if (!selectedSectionObj) return;
+    setIsSubmitting(true);
+    const ttId = getTtId(selectedSectionObj);
+    try {
+      await setDoc(doc(db, 'timetables', ttId), {
+        collegeCode: adminCollegeCode,
+        section: selectedSectionObj.displayName,
+        year: selectedSectionObj.year,
+        department: selectedSectionObj.department,
+        sectionId: selectedSectionObj.id,
         schedule: timetable,
         updatedAt: new Date().toISOString(),
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-      triggerToast(`📅 Timetable for ${selectedSection} saved & synced to Mobile!`);
+      triggerToast(`📅 Timetable for ${selectedSectionObj.displayName} (${selectedSectionObj.year}) saved & synced to Mobile!`);
     } catch (err) {
       alert('Failed to save timetable: ' + err.message);
     }
     setIsSubmitting(false);
   };
 
-  const clearCell = (day, period) => {
+  const clearCell = async (day, period) => {
+    if (!selectedSectionObj) return;
     const newTimetable = { ...timetable };
     if (newTimetable[day]) {
       newTimetable[day] = newTimetable[day].filter(c => c.period !== period);
     }
     setTimetable(newTimetable);
+
+    // Live sync to Firestore
+    const ttId = getTtId(selectedSectionObj);
+    try {
+      await setDoc(doc(db, 'timetables', ttId), {
+        collegeCode: adminCollegeCode,
+        section: selectedSectionObj.displayName,
+        year: selectedSectionObj.year,
+        department: selectedSectionObj.department,
+        sectionId: selectedSectionObj.id,
+        schedule: newTimetable,
+        updatedAt: new Date().toISOString(),
+      });
+      triggerToast(`🗑️ Cleared P${period} (${day}) for ${selectedSectionObj.displayName} (${selectedSectionObj.year})`);
+    } catch (err) {
+      console.warn('Live clear error:', err);
+    }
   };
 
   if (loadingConfig) {
@@ -200,7 +277,6 @@ const TimetableBuilder = ({ adminCollegeCode, sections, teachers }) => {
   }
 
   const timeline = buildTimeline(config);
-  const periodSlots = timeline.filter(t => !t.isLunch);
   const teacherMap = {};
   teachers.forEach(t => { teacherMap[t.id] = t; });
 
@@ -225,13 +301,13 @@ const TimetableBuilder = ({ adminCollegeCode, sections, teachers }) => {
       <div className="tt-header">
         <div>
           <h2 className="tt-title">📅 Timetable Builder</h2>
-          <p className="tt-sub">Build weekly schedules for each section — auto-synced to Mobile App</p>
+          <p className="tt-sub">Build weekly schedules for each section & year — auto-synced to Mobile App</p>
         </div>
         <div className="tt-header-actions">
           <button className="btn-tt-config" onClick={() => setShowConfigModal(true)}>
             ⚙️ Configure Periods
           </button>
-          {selectedSection && (
+          {selectedSectionObj && (
             <button
               className={`btn-tt-save ${saved ? 'saved' : ''}`}
               onClick={handleSaveTimetable}
@@ -255,27 +331,30 @@ const TimetableBuilder = ({ adminCollegeCode, sections, teachers }) => {
 
       {/* Section Selector */}
       <div className="tt-section-selector">
-        <label className="tt-selector-label">Select Section to Edit Timetable:</label>
+        <label className="tt-selector-label">Select Section & Academic Year to Edit Timetable:</label>
         <div className="tt-sections-list">
           {sections.length === 0 ? (
             <p className="tt-no-sections">⚠️ No sections created yet. Go to "Sections" tab first.</p>
           ) : (
-            sections.map(sec => (
-              <button
-                key={sec.id}
-                className={`tt-sec-btn ${selectedSection === sec.displayName ? 'active' : ''}`}
-                onClick={() => setSelectedSection(sec.displayName)}
-              >
-                {sec.displayName}
-                <span className="tt-sec-year">{sec.year}</span>
-              </button>
-            ))
+            sections.map(sec => {
+              const isSelected = selectedSectionObj?.id === sec.id;
+              return (
+                <button
+                  key={sec.id}
+                  className={`tt-sec-btn ${isSelected ? 'active' : ''}`}
+                  onClick={() => setSelectedSectionObj(sec)}
+                >
+                  {sec.displayName}
+                  <span className="tt-sec-year">{sec.year}</span>
+                </button>
+              );
+            })
           )}
         </div>
       </div>
 
       {/* Timetable Grid */}
-      {selectedSection ? (
+      {selectedSectionObj ? (
         <div className="tt-grid-wrapper">
           <div className="tt-grid" style={{ gridTemplateColumns: `120px repeat(${DAYS.length}, 1fr)` }}>
             {/* Header Row */}
@@ -349,58 +428,89 @@ const TimetableBuilder = ({ adminCollegeCode, sections, teachers }) => {
         </div>
       )}
 
-      {/* CELL ASSIGNMENT MODAL */}
+      {/* CELL EDIT MODAL */}
       <AnimatePresence>
         {cellModal && (
-          <div className="modal-overlay">
+          <div className="tt-modal-overlay">
             <motion.div
-              className="cell-modal-content"
+              className="tt-modal-content"
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
             >
-              <div className="modal-header">
-                <h2>📝 {cellModal.day} — {cellModal.periodLabel}</h2>
-                <button className="close-btn" onClick={() => setCellModal(null)}>✕</button>
+              <div className="tt-modal-header">
+                <h3>
+                  Assign Slot — {cellModal.day}, P{cellModal.period} ({cellModal.start}–{cellModal.end})
+                </h3>
+                <button className="tt-modal-close" onClick={() => setCellModal(null)}>✕</button>
               </div>
-              <p className="cell-modal-time">⏱ {cellModal.start} – {cellModal.end} | Section: <strong>{selectedSection}</strong></p>
 
-              <div className="modal-form" style={{ gap: 16 }}>
-                <div className="form-group">
+              <div className="tt-modal-body">
+                {/* Subject Selection */}
+                <div className="tt-form-group">
                   <label>Subject</label>
                   <select
-                    className="modal-select"
+                    className="tt-input-select"
                     value={cellModal.subject}
                     onChange={e => setCellModal({ ...cellModal, subject: e.target.value })}
                   >
                     <option value="">— Select Subject —</option>
-                    {subjects.map(s => <option key={s} value={s}>{s}</option>)}
+                    {subjects.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
                   </select>
                 </div>
 
-                <div className="form-group">
-                  <label>Assign Teacher</label>
+                {/* Custom Subject Input */}
+                <div className="tt-form-group">
+                  <label>Or Type Custom Subject Name</label>
+                  <input
+                    type="text"
+                    className="tt-input-text"
+                    placeholder="e.g. Artificial Intelligence"
+                    value={cellModal.subject}
+                    onChange={e => setCellModal({ ...cellModal, subject: e.target.value })}
+                  />
+                </div>
+
+                {/* Teacher Selection */}
+                <div className="tt-form-group">
+                  <label>Faculty / Teacher</label>
                   <select
-                    className="modal-select"
+                    className="tt-input-select"
                     value={cellModal.teacherId}
                     onChange={e => {
-                      const t = teachers.find(t => t.id === e.target.value);
-                      setCellModal({ ...cellModal, teacherId: e.target.value, teacherName: t?.name || '' });
+                      const tId = e.target.value;
+                      const teacher = teacherMap[tId];
+                      setCellModal({
+                        ...cellModal,
+                        teacherId: tId,
+                        teacherName: teacher ? teacher.name : '',
+                      });
                     }}
                   >
-                    <option value="">— Select Teacher —</option>
-                    {teachers
-                      .filter(t => !cellModal.subject || (t.assignedSubjects || [t.subject]).includes(cellModal.subject))
-                      .map(t => (
-                        <option key={t.id} value={t.id}>{t.name} ({t.department})</option>
-                      ))
-                    }
+                    <option value="">— Select Faculty —</option>
+                    {teachers.map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({t.department || 'CSE'})
+                      </option>
+                    ))}
                   </select>
                 </div>
 
-                <div className="modal-actions">
-                  <button className="btn-cancel" onClick={() => setCellModal(null)}>Cancel</button>
-                  <button className="btn-submit" onClick={handleSaveCell}>✅ Assign</button>
+                <div className="tt-modal-actions">
+                  <button
+                    className="btn-tt-clear"
+                    onClick={() => { clearCell(cellModal.day, cellModal.period); setCellModal(null); }}
+                  >
+                    Clear Slot
+                  </button>
+                  <div className="tt-actions-right">
+                    <button className="btn-tt-cancel" onClick={() => setCellModal(null)}>Cancel</button>
+                    <button className="btn-tt-confirm" onClick={handleSaveCell}>
+                      Set Slot
+                    </button>
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -408,129 +518,86 @@ const TimetableBuilder = ({ adminCollegeCode, sections, teachers }) => {
         )}
       </AnimatePresence>
 
-      {/* CONFIG MODAL */}
+      {/* TIMETABLE CONFIG MODAL */}
       <AnimatePresence>
         {showConfigModal && (
-          <div className="modal-overlay">
+          <div className="tt-modal-overlay">
             <motion.div
-              className="cell-modal-content"
+              className="tt-modal-content config-modal-content"
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
             >
-              <div className="modal-header">
-                <h2>⚙️ Configure Timetable</h2>
-                <button className="close-btn" onClick={() => setShowConfigModal(false)}>✕</button>
+              <div className="tt-modal-header">
+                <h3>⚙️ Timetable Period & Lunch Configuration</h3>
+                <button className="tt-modal-close" onClick={() => setShowConfigModal(false)}>✕</button>
               </div>
-              <p style={{ fontSize: 13, color: '#9ca3af', marginTop: -8, marginBottom: 20 }}>
-                These settings apply to all sections of your college.
-              </p>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div className="tt-modal-body">
                 <div className="form-row-2">
-                  <div className="form-group">
-                    <label>Start Time</label>
+                  <div className="tt-form-group">
+                    <label>College Start Time</label>
                     <input
                       type="time"
-                      className="modal-select"
+                      className="tt-input-text"
                       value={draftConfig.startTime}
                       onChange={e => setDraftConfig({ ...draftConfig, startTime: e.target.value })}
                     />
                   </div>
-                  <div className="form-group">
+                  <div className="tt-form-group">
                     <label>Periods Per Day</label>
-                    <div className="period-count-selector">
-                      {[5, 6, 7, 8].map(n => (
-                        <button
-                          key={n}
-                          type="button"
-                          className={`period-count-btn ${draftConfig.periodsPerDay === n ? 'active' : ''}`}
-                          onClick={() => setDraftConfig({ ...draftConfig, periodsPerDay: n })}
-                        >{n}</button>
-                      ))}
-                    </div>
+                    <input
+                      type="number"
+                      min="4"
+                      max="10"
+                      className="tt-input-text"
+                      value={draftConfig.periodsPerDay}
+                      onChange={e => setDraftConfig({ ...draftConfig, periodsPerDay: parseInt(e.target.value) || 7 })}
+                    />
                   </div>
                 </div>
 
                 <div className="form-row-2">
-                  <div className="form-group">
-                    <label>Period Duration (minutes)</label>
-                    <div className="period-count-selector">
-                      {[45, 50, 55, 60].map(n => (
-                        <button
-                          key={n}
-                          type="button"
-                          className={`period-count-btn ${draftConfig.periodDuration === n ? 'active' : ''}`}
-                          onClick={() => setDraftConfig({ ...draftConfig, periodDuration: n })}
-                        >{n}m</button>
-                      ))}
-                    </div>
+                  <div className="tt-form-group">
+                    <label>Period Duration (Minutes)</label>
+                    <input
+                      type="number"
+                      min="30"
+                      max="90"
+                      className="tt-input-text"
+                      value={draftConfig.periodDuration}
+                      onChange={e => setDraftConfig({ ...draftConfig, periodDuration: parseInt(e.target.value) || 50 })}
+                    />
                   </div>
-                  <div className="form-group">
-                    <label>Lunch Break</label>
-                    <div className="period-count-selector">
-                      <button
-                        type="button"
-                        className={`period-count-btn ${draftConfig.hasLunchBreak ? 'active' : ''}`}
-                        onClick={() => setDraftConfig({ ...draftConfig, hasLunchBreak: true })}
-                      >Yes</button>
-                      <button
-                        type="button"
-                        className={`period-count-btn ${!draftConfig.hasLunchBreak ? 'active' : ''}`}
-                        onClick={() => setDraftConfig({ ...draftConfig, hasLunchBreak: false })}
-                      >No</button>
-                    </div>
+                  <div className="tt-form-group">
+                    <label>Lunch Break After Period #</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="8"
+                      className="tt-input-text"
+                      value={draftConfig.lunchAfterPeriod}
+                      onChange={e => setDraftConfig({ ...draftConfig, lunchAfterPeriod: parseInt(e.target.value) || 4 })}
+                    />
                   </div>
                 </div>
 
-                {draftConfig.hasLunchBreak && (
-                  <div className="form-row-2">
-                    <div className="form-group">
-                      <label>Lunch After Period</label>
-                      <div className="period-count-selector">
-                        {Array.from({ length: draftConfig.periodsPerDay - 1 }, (_, i) => i + 1).map(n => (
-                          <button
-                            key={n}
-                            type="button"
-                            className={`period-count-btn ${draftConfig.lunchAfterPeriod === n ? 'active' : ''}`}
-                            onClick={() => setDraftConfig({ ...draftConfig, lunchAfterPeriod: n })}
-                          >P{n}</button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="form-group">
-                      <label>Lunch Duration (minutes)</label>
-                      <div className="period-count-selector">
-                        {[30, 45, 60].map(n => (
-                          <button
-                            key={n}
-                            type="button"
-                            className={`period-count-btn ${draftConfig.lunchDuration === n ? 'active' : ''}`}
-                            onClick={() => setDraftConfig({ ...draftConfig, lunchDuration: n })}
-                          >{n}m</button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Preview */}
-                <div className="config-preview-box">
-                  <div className="preview-label">SCHEDULE PREVIEW (Mon)</div>
-                  <div className="config-preview-timeline">
-                    {buildTimeline(draftConfig).map((slot, i) => (
-                      <div key={i} className={`preview-slot ${slot.isLunch ? 'preview-lunch' : ''}`}>
-                        <span>{slot.isLunch ? '🍱' : `P${slot.period}`}</span>
-                        <span>{slot.start}–{slot.end}</span>
-                      </div>
-                    ))}
-                  </div>
+                <div className="tt-form-group">
+                  <label>Lunch Duration (Minutes)</label>
+                  <input
+                    type="number"
+                    min="15"
+                    max="90"
+                    className="tt-input-text"
+                    value={draftConfig.lunchDuration}
+                    onChange={e => setDraftConfig({ ...draftConfig, lunchDuration: parseInt(e.target.value) || 45 })}
+                  />
                 </div>
 
-                <div className="modal-actions">
-                  <button className="btn-cancel" onClick={() => setShowConfigModal(false)}>Cancel</button>
-                  <button className="btn-submit" onClick={handleSaveConfig} disabled={isSubmitting}>
-                    {isSubmitting ? 'Saving...' : '💾 Save Config'}
+                <div className="tt-modal-actions">
+                  <button className="btn-tt-cancel" onClick={() => setShowConfigModal(false)}>Cancel</button>
+                  <button className="btn-tt-confirm" onClick={handleSaveConfig} disabled={isSubmitting}>
+                    {isSubmitting ? 'Saving...' : '💾 Save Configuration'}
                   </button>
                 </div>
               </div>

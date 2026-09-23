@@ -1,7 +1,7 @@
 .admin-web-page {
   min-height: 100vh;
-  background: #0b0f19;
-  color: #f3f4f6;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   padding: 40px 24px;
   position: relative;
   overflow-x: hidden;
@@ -67,20 +67,20 @@
 .admin-web-title {
   font-size: 32px;
   font-weight: 800;
-  color: #ffffff;
+  color: var(--text-primary);
   margin: 0 0 8px 0;
   letter-spacing: -0.5px;
 }
 
 .admin-web-title span {
-  background: linear-gradient(135deg, #60a5fa, #a78bfa);
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .admin-web-subtitle {
   font-size: 14px;
-  color: #9ca3af;
+  color: var(--text-secondary);
   margin: 0;
   max-width: 700px;
 }
@@ -110,27 +110,32 @@
 
 .btn-primary-add {
   border: none;
-  color: white;
-  padding: 12px 20px;
-  border-radius: 14px;
+  color: #ffffff;
+  padding: 12px 22px;
+  border-radius: var(--radius-full);
+  font-family: 'Inter', sans-serif;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 0.88rem;
   cursor: pointer;
-  box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.4);
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .btn-primary-add.teacher-btn {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  background: linear-gradient(135deg, var(--accent-blue), #2563eb);
+  box-shadow: 0 4px 18px rgba(37, 99, 235, 0.35);
 }
 
 .btn-primary-add.student-btn {
-  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  background: linear-gradient(135deg, var(--accent-purple), #7c3aed);
+  box-shadow: 0 4px 18px rgba(124, 58, 237, 0.35);
 }
 
 .btn-primary-add:hover {
   transform: translateY(-2px);
-  box-shadow: 0 14px 30px -5px rgba(59, 130, 246, 0.6);
+  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.5);
 }
 
 .toast-banner-web {
@@ -151,11 +156,12 @@
   gap: 16px;
   margin-bottom: 24px;
   flex-wrap: wrap;
-  background: rgba(17, 24, 39, 0.7);
+  background: var(--bg-card);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-subtle);
   border-radius: 18px;
   padding: 8px 12px;
+  box-shadow: var(--shadow-sm);
 }
 
 .tab-group {
@@ -166,7 +172,7 @@
 .nav-tab-btn {
   background: transparent;
   border: none;
-  color: #9ca3af;
+  color: var(--text-secondary);
   padding: 10px 18px;
   border-radius: 12px;
   font-size: 14px;
@@ -176,10 +182,10 @@
 }
 
 .nav-tab-btn.active {
-  background: rgba(59, 130, 246, 0.2);
-  color: #60a5fa;
+  background: var(--accent-blue-glow);
+  color: var(--accent-blue);
   font-weight: 700;
-  border: 1px solid rgba(59, 130, 246, 0.4);
+  border: 1px solid var(--accent-blue);
 }
 
 .search-filter-group {
@@ -220,18 +226,18 @@
 }
 
 .admin-search-input {
-  background: rgba(17, 24, 39, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
   padding: 8px 12px 8px 36px;
-  color: white;
+  color: var(--text-primary);
   font-size: 13px;
   outline: none;
   min-width: 240px;
 }
 
 .admin-search-input:focus {
-  border-color: #60a5fa;
+  border-color: var(--accent-blue);
 }
 
 .roster-grid {
@@ -241,19 +247,20 @@
 }
 
 .faculty-card {
-  background: rgba(17, 24, 39, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
   border-radius: 20px;
   padding: 20px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   transition: transform 0.2s, border-color 0.2s;
+  box-shadow: var(--shadow-sm);
 }
 
 .faculty-card:hover {
   transform: translateY(-3px);
-  border-color: rgba(96, 165, 250, 0.4);
+  border-color: var(--accent-blue);
 }
 
 .faculty-card-top {
@@ -267,7 +274,7 @@
   width: 46px;
   height: 46px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  background: linear-gradient(135deg, var(--accent-blue), #1d4ed8);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -283,13 +290,13 @@
 .faculty-name {
   font-size: 16px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-primary);
   margin: 0 0 2px 0;
 }
 
 .faculty-sub {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-secondary);
   margin: 0;
 }
 
@@ -372,18 +379,19 @@
 }
 
 .student-card {
-  background: rgba(17, 24, 39, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
   border-radius: 18px;
   padding: 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   transition: border-color 0.2s;
+  box-shadow: var(--shadow-sm);
 }
 
 .student-card:hover {
-  border-color: rgba(139, 92, 246, 0.3);
+  border-color: var(--accent-purple);
 }
 
 .student-card-actions {
@@ -393,9 +401,9 @@
 }
 
 .btn-icon-edit {
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.25);
-  color: #60a5fa;
+  background: var(--accent-blue-glow);
+  border: 1px solid var(--accent-blue);
+  color: var(--accent-blue);
   padding: 8px;
   border-radius: 10px;
   cursor: pointer;
@@ -404,7 +412,7 @@
 }
 
 .btn-icon-edit:hover {
-  background: rgba(59, 130, 246, 0.25);
+  background: var(--accent-blue-glow);
 }
 
 .student-card-left {
@@ -417,7 +425,7 @@
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  background: linear-gradient(135deg, var(--accent-purple), #6d28d9);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -429,24 +437,24 @@
 .student-name {
   font-size: 15px;
   font-weight: 700;
-  color: white;
+  color: var(--text-primary);
   margin: 0 0 2px 0;
 }
 
 .student-sub {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-secondary);
   margin: 0;
 }
 
 .sec-tag {
-  color: #34d399;
+  color: var(--present-color);
   font-weight: 700;
 }
 
 .student-meta {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--text-muted);
   margin: 2px 0 0 0;
 }
 
@@ -454,10 +462,11 @@
   grid-column: 1 / -1;
   padding: 40px;
   text-align: center;
-  color: #6b7280;
+  color: var(--text-muted);
   font-size: 14px;
-  background: rgba(17, 24, 39, 0.5);
+  background: var(--bg-card);
   border-radius: 18px;
+  border: 1px solid var(--border-subtle);
 }
 
 /* Allocation Modal specific */

@@ -553,3 +553,250 @@
 .icon-present { color: var(--present-color); }
 .icon-absent { color: var(--absent-color); }
 
+/* Today's Schedule Widget */
+.std-today-widget {
+  padding: 20px;
+}
+
+.today-widget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.live-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  letter-spacing: 0.5px;
+  display: inline-block;
+  margin-bottom: 4px;
+}
+
+.widget-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.btn-view-full-tt {
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-view-full-tt:hover {
+  background: #3b82f6;
+  color: #ffffff;
+}
+
+.today-slots-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.today-slot-pill {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+}
+
+.slot-period-num {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.15);
+  padding: 4px 8px;
+  border-radius: 6px;
+  min-width: 32px;
+  text-align: center;
+}
+
+.slot-sub-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.slot-sub-time {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.no-today-classes {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  padding: 10px 0;
+}
+
+/* Student Timetable Tab */
+.std-tt-card {
+  padding: 24px;
+}
+
+.std-tt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.tt-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  margin-bottom: 6px;
+  letter-spacing: 0.5px;
+}
+
+.std-tt-header h2 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.std-tt-sub {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.std-day-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.std-day-btn {
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.std-day-btn.active {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: #3b82f6;
+  color: #3b82f6;
+  font-weight: 700;
+}
+
+.is-today {
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.today-dot {
+  color: #10b981;
+  margin-left: 2px;
+  font-size: 1rem;
+}
+
+.std-tt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.std-tt-slot-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  gap: 16px;
+  flex-wrap: wrap;
+  transition: all 0.2s ease;
+}
+
+.std-tt-slot-card:hover {
+  border-color: rgba(59, 130, 246, 0.3);
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.std-tt-time-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 110px;
+}
+
+.std-p-badge {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.12);
+  padding: 2px 8px;
+  border-radius: 6px;
+  width: fit-content;
+}
+
+.std-slot-time {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.std-tt-main-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.std-slot-subject {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.std-slot-teacher {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.std-tt-status-col {
+  display: flex;
+  align-items: center;
+}
+
+.std-period-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+}
+

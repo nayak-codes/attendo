@@ -27,12 +27,8 @@ const Navbar = () => {
     <nav className="navbar">
       <div className="navbar-container">
         <div className="navbar-brand" onClick={handleHome}>
-          <div className="brand-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
-          <span className="brand-name">Edu<span className="brand-accent">Track</span></span>
+          <img src="/app-logo.png" alt="Knapsack Logo" style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'contain' }} />
+          <span className="brand-name">Knap<span className="brand-accent">sack</span></span>
           {user.selectedCollegeCode && user.role !== 'superadmin' && (
             <span style={{
               fontSize: '11px',

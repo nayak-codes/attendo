@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, ActivityIndicator, Modal,
@@ -17,6 +17,8 @@ export default function StudentDashboardScreen({ onNavigate }) {
   const {
     notifications,
     attendanceRecords,
+    timetables,
+    collegeConfig,
     getStudentAttendance,
     getStudentCalendar,
     getStudentSessions,
@@ -123,8 +125,195 @@ export default function StudentDashboardScreen({ onNavigate }) {
     ]},
   ];
 
-  const [selectedDay, setSelectedDay] = useState('Monday');
-  const currentSchedule = TIMETABLE.find(t => t.day === selectedDay)?.classes || [];
+  const studentSection = user?.section || 'A';
+
+  const liveStudentSchedule = React.useMemo(() => {
+    if (!timetables || timetables.length === 0) return TIMETABLE;
+
+    const secDoc = timetables.find(tt => {
+      if (!tt.section) return false;
+      const sec = tt.section.toLowerCase().trim();
+      const target = studentSection.toLowerCase().trim();
+      return sec === target || sec.includes(target) || target.includes(sec);
+    }) || timetables[0] || null;
+
+    if (!secDoc || !secDoc.schedule) return TIMETABLE;
+
+    const cfg = collegeConfig || { startTime: '09:00', periodsPerDay: 7, periodDuration: 50, hasLunchBreak: true, lunchAfterPeriod: 4, lunchDuration: 45 };
+    const timelineMap = {};
+    let current = cfg.startTime || '09:00';
+
+    const addMins = (t, mins) => {
+      if (!t) return '';
+      const [h, m] = t.split(':').map(Number);
+      const total = h * 60 + m + mins;
+      const newH = Math.floor(total / 60) % 24;
+      const newM = total % 60;
+      return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
+    };
+
+    for (let i = 1; i <= (cfg.periodsPerDay || 7); i++) {
+      const end = addMins(current, cfg.periodDuration || 50);
+      timelineMap[i] = `${current} - ${end}`;
+      current = end;
+      if (cfg.hasLunchBreak && i === cfg.lunchAfterPeriod) {
+        current = addMins(current, cfg.lunchDuration || 45);
+      }
+    }
+
+    const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    let hasCustom = false;
+    const res = DAYS.map(dayName => {
+      const dayCells = secDoc.schedule[dayName] || [];
+      const classes = dayCells.map(cell => {
+        hasCustom = true;
+        return {
+          time: timelineMap[cell.period] || `Period ${cell.period}`,
+          subject: cell.subject,
+          room: `LH ${100 + (cell.period || 1)}`,
+          teacher: cell.teacherName || 'Faculty',
+        };
+      });
+      return { day: dayName, classes };
+    });
+
+    return hasCustom ? res : TIMETABLE;
+  }, [timetables, collegeConfig, studentSection]);
+
+  // ── Timetable helpers ──────────────────────────────────────────────
+  const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const todayDayName = DAY_NAMES[new Date().getDay()];
+  const [selectedDay, setSelectedDay] = useState(todayDayName !== 'Sunday' && todayDayName !== 'Saturday' ? todayDayName : 'Monday');
+  const [ttViewMode, setTtViewMode] = useState('day'); // 'day' | 'week'
+  const [showTodayOnly, setShowTodayOnly] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Parse time string like '09:00 - 09:50' or '09:00 AM - 10:00 AM' → { startMins, endMins }
+  const parseClassTime = (timeStr) => {
+    if (!timeStr) return null;
+    // Normalize AM/PM format
+    const clean = timeStr.replace(/\s+/g, ' ').trim();
+    const parts = clean.split(/\s*-\s*/);
+    if (parts.length < 2) return null;
+    const toMins = (t) => {
+      const isPM = t.toUpperCase().includes('PM');
+      const isAM = t.toUpperCase().includes('AM');
+      const stripped = t.replace(/AM|PM/gi, '').trim();
+      let [h, m] = stripped.split(':').map(Number);
+      if (isNaN(m)) m = 0;
+      if (isPM && h !== 12) h += 12;
+      if (isAM && h === 12) h = 0;
+      return h * 60 + m;
+    };
+    return { startMins: toMins(parts[0]), endMins: toMins(parts[1]) };
+  };
+
+  const getNowMins = (t) => t.getHours() * 60 + t.getMinutes();
+
+  const isCurrentClass = (cls) => {
+    if (selectedDay !== todayDayName && ttViewMode === 'day') return false;
+    const range = parseClassTime(cls.time);
+    if (!range) return false;
+    const now = getNowMins(currentTime);
+    return now >= range.startMins && now < range.endMins;
+  };
+
+  const isCurrentClassForDay = (cls, day) => {
+    if (day !== todayDayName) return false;
+    const range = parseClassTime(cls.time);
+    if (!range) return false;
+    const now = getNowMins(currentTime);
+    return now >= range.startMins && now < range.endMins;
+  };
+
+  const isPastClass = (cls, day) => {
+    if (day !== todayDayName) return false;
+    const range = parseClassTime(cls.time);
+    if (!range) return false;
+    return getNowMins(currentTime) >= range.endMins;
+  };
+
+  // Real-time attendance status for any timetable period slot
+  const getClassAttendanceBadge = (cls, dayName) => {
+    if (!cls || !cls.subject) return null;
+    const isToday = dayName === todayDayName;
+    const isPast = isPastClass(cls, dayName);
+    const isCurrent = isCurrentClassForDay(cls, dayName);
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const normSubj = (cls.subject || '').toLowerCase().trim();
+
+    // Check attendance records in Firestore
+    const rec = (attendanceRecords || []).find(r => {
+      const rSubj = (r.subject || '').toLowerCase().trim();
+      const matchesSubject = rSubj === normSubj || rSubj.includes(normSubj) || normSubj.includes(rSubj);
+      const matchesDate = isToday ? r.date === todayStr : true;
+      return matchesSubject && matchesDate;
+    });
+
+    if (rec) {
+      if (rec.status === 'present') {
+        return {
+          type: 'present',
+          badgeText: '✅ Present',
+          fullLabel: 'Attendance Marked: Present ✅',
+          color: colors.present,
+          bg: colors.presentBg,
+          border: colors.presentBorder
+        };
+      }
+      if (rec.status === 'absent') {
+        return {
+          type: 'absent',
+          badgeText: '❌ Absent',
+          fullLabel: 'Attendance Marked: Absent ❌',
+          color: colors.absent,
+          bg: colors.absentBg,
+          border: colors.absentBorder
+        };
+      }
+    }
+
+    if (isCurrent) {
+      return {
+        type: 'live',
+        badgeText: '🔴 LIVE Class',
+        fullLabel: 'Ongoing Class • Attendance Active',
+        color: colors.accentBlue,
+        bg: colors.accentBlueGlow,
+        border: colors.accentBlue
+      };
+    }
+
+    if (isPast) {
+      return {
+        type: 'pending',
+        badgeText: '⏳ Pending Attendance',
+        fullLabel: 'Class Ended • Teacher Not Marked Yet',
+        color: '#F59E0B',
+        bg: 'rgba(245, 158, 11, 0.15)',
+        border: 'rgba(245, 158, 11, 0.3)'
+      };
+    }
+
+    return {
+      type: 'upcoming',
+      badgeText: '⏰ Scheduled',
+      fullLabel: 'Upcoming Period',
+      color: colors.textMuted,
+      bg: colors.bgGlass,
+      border: colors.borderSubtle
+    };
+  };
+
+  const activeScheduleList = (timetables && timetables.length > 0) ? liveStudentSchedule : TIMETABLE;
+  const currentSchedule = activeScheduleList.find(t => t.day === selectedDay)?.classes || [];
+  const todaySchedule = activeScheduleList.find(t => t.day === todayDayName)?.classes || [];
 
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -163,46 +352,80 @@ export default function StudentDashboardScreen({ onNavigate }) {
   // State for Time Horizon Filter: 'monthly' | 'last_week' | 'yesterday'
   const [studentAnalysisFilter, setStudentAnalysisFilter] = useState('monthly');
 
-  // Datasets matching Image 4 format for different time filters
-  const MONTHLY_TABLE_DATA = [
-    { slNo: 1, code: 'AI', subject: 'Artificial Intelligence', held: 66, attended: 36, pct: '54.55%' },
-    { slNo: 2, code: 'AI Lab', subject: 'AI Practical Lab', held: 13, attended: 5, pct: '38.46%' },
-    { slNo: 3, code: 'CN', subject: 'Computer Networks', held: 69, attended: 36, pct: '52.17%' },
-    { slNo: 4, code: 'CN Lab', subject: 'Computer Networks Lab', held: 20, attended: 16, pct: '80.00%' },
-    { slNo: 5, code: 'DA', subject: 'Data Analytics', held: 66, attended: 39, pct: '59.09%' },
-    { slNo: 6, code: 'DEVOPS', subject: 'DevOps Engineering', held: 65, attended: 40, pct: '61.54%' },
-    { slNo: 7, code: 'DEVOPS LAB', subject: 'DevOps Practical Lab', held: 12, attended: 8, pct: '66.67%' },
-    { slNo: 8, code: 'IPR', subject: 'Intellectual Property Rights', held: 20, attended: 12, pct: '60.00%' },
-    { slNo: 9, code: 'NLP', subject: 'Natural Language Processing', held: 66, attended: 37, pct: '56.06%' },
-    { slNo: 10, code: 'QAVR-I', subject: 'Quantitative Aptitude VR-I', held: 1, attended: 1, pct: '100.00%' },
-    { slNo: 11, code: 'UIDF', subject: 'UI Design Fundamentals', held: 20, attended: 18, pct: '90.00%' },
-  ];
+  // Derive dynamic time-filtered attendance records for student analysis
+  const filteredAnalysisRecords = React.useMemo(() => {
+    if (!attendanceRecords || attendanceRecords.length === 0) return [];
 
-  const LAST_WEEK_TABLE_DATA = [
-    { slNo: 1, code: 'AI', subject: 'Artificial Intelligence', held: 4, attended: 3, pct: '75.00%' },
-    { slNo: 2, code: 'CN', subject: 'Computer Networks', held: 5, attended: 4, pct: '80.00%' },
-    { slNo: 3, code: 'DA', subject: 'Data Analytics', held: 4, attended: 3, pct: '75.00%' },
-    { slNo: 4, code: 'DEVOPS', subject: 'DevOps Engineering', held: 5, attended: 4, pct: '80.00%' },
-    { slNo: 5, code: 'NLP', subject: 'Natural Language Processing', held: 4, attended: 3, pct: '75.00%' },
-    { slNo: 6, code: 'UIDF', subject: 'UI Design Fundamentals', held: 2, attended: 2, pct: '100.00%' },
-  ];
+    const yest = new Date();
+    yest.setDate(yest.getDate() - 1);
+    const yesterdayStr = yest.toISOString().split('T')[0];
 
-  const YESTERDAY_TABLE_DATA = [
-    { slNo: 1, code: 'AI', subject: 'Artificial Intelligence', held: 1, attended: 1, pct: '100.00%' },
-    { slNo: 2, code: 'CN', subject: 'Computer Networks', held: 1, attended: 1, pct: '100.00%' },
-    { slNo: 3, code: 'DEVOPS', subject: 'DevOps Engineering', held: 1, attended: 1, pct: '100.00%' },
-    { slNo: 4, code: 'NLP', subject: 'Natural Language Processing', held: 1, attended: 0, pct: '0.00%' },
-  ];
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const weekAgoStr = weekAgo.toISOString().split('T')[0];
 
-  const activeTableData = studentAnalysisFilter === 'last_week'
-    ? LAST_WEEK_TABLE_DATA
-    : studentAnalysisFilter === 'yesterday'
-    ? YESTERDAY_TABLE_DATA
-    : MONTHLY_TABLE_DATA;
+    return attendanceRecords.filter(rec => {
+      if (!rec.date) return false;
+      if (studentAnalysisFilter === 'yesterday') {
+        return rec.date === yesterdayStr;
+      }
+      if (studentAnalysisFilter === 'last_week') {
+        return rec.date >= weekAgoStr;
+      }
+      return true;
+    });
+  }, [attendanceRecords, studentAnalysisFilter]);
+
+  // Aggregate by subject dynamically
+  const activeTableData = React.useMemo(() => {
+    const defaultEnrolledSubjects = [
+      'Operating Systems',
+      'Data Structures',
+      'DBMS',
+      'Computer Networks',
+      'Software Engineering'
+    ];
+
+    const map = {};
+
+    filteredAnalysisRecords.forEach(rec => {
+      const s = rec.subject || 'Subject';
+      if (!map[s]) map[s] = { held: 0, attended: 0 };
+      map[s].held += 1;
+      if (rec.status === 'present') map[s].attended += 1;
+    });
+
+    if (Object.keys(map).length === 0) {
+      const knownSubjects = Object.keys(subjectData).length > 0
+        ? Object.keys(subjectData)
+        : defaultEnrolledSubjects;
+
+      knownSubjects.forEach(s => {
+        map[s] = { held: 0, attended: 0 };
+      });
+    }
+
+    return Object.entries(map).map(([subj, d], idx) => {
+      const words = subj.split(/\s+/).filter(Boolean);
+      const code = words.length === 1
+        ? words[0].slice(0, 5).toUpperCase()
+        : words.map(w => w[0]).join('').toUpperCase();
+      const pctVal = d.held > 0 ? (d.attended / d.held) * 100 : 0;
+
+      return {
+        slNo: idx + 1,
+        code,
+        subject: subj,
+        held: d.held,
+        attended: d.attended,
+        pct: pctVal.toFixed(2) + '%'
+      };
+    });
+  }, [filteredAnalysisRecords, subjectData]);
 
   const totalAnalysisClasses = activeTableData.reduce((a, s) => a + s.held, 0);
   const totalAnalysisAttended = activeTableData.reduce((a, s) => a + s.attended, 0);
-  const totalAnalysisMissed = totalAnalysisClasses - totalAnalysisAttended;
+  const totalAnalysisMissed = Math.max(0, totalAnalysisClasses - totalAnalysisAttended);
   const overallAnalysisPct = totalAnalysisClasses > 0 ? (totalAnalysisAttended / totalAnalysisClasses) * 100 : 0;
   const overallAnalysisPctFormatted = overallAnalysisPct.toFixed(2);
 
@@ -916,68 +1139,515 @@ export default function StudentDashboardScreen({ onNavigate }) {
           </View>
         )}
 
-        {/* ══════ TAB 3: TIMETABLE ══════ */}
+        {/* ══════ TAB 3: TIMETABLE (Professional Matrix & Timeline) ══════ */}
         {activeBottomTab === 'timetable' && (
           <View style={{ gap: 14 }}>
-            <View style={[{ backgroundColor: colors.bgCard, borderColor: colors.borderSubtle, borderRadius: 18, padding: 16, borderWidth: 1 }]}>
+
+            {/* ── Header Card ── */}
+            <View style={[{
+              backgroundColor: colors.bgCard,
+              borderColor: colors.borderSubtle,
+              borderRadius: 20,
+              padding: 16,
+              borderWidth: 1,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.06,
+              shadowRadius: 8,
+              elevation: 3,
+            }]}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <View>
-                  <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary }}>📅 Class Timetable</Text>
-                  <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>{user?.department || 'CSE'} • Section {user?.section || 'A'} (3rd Year)</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                  <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: colors.accentBlueGlow, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.accentBlue + '30' }}>
+                    <Text style={{ fontSize: 22 }}>📅</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 17, fontWeight: '900', color: colors.textPrimary, letterSpacing: -0.3 }}>Class Timetable</Text>
+                    <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 1 }} numberOfLines={1}>
+                      {user?.department || 'CSE'} Dept • Section {user?.section || 'A'}
+                    </Text>
+                  </View>
                 </View>
-                <View style={[styles.pctBadge, { backgroundColor: colors.accentBlueGlow, paddingHorizontal: 10, paddingVertical: 4 }]}>
-                  <Text style={{ fontSize: 11, fontWeight: '800', color: colors.accentBlue }}>{selectedDay}</Text>
+
+                {/* View mode toggle: Day / Week Grid */}
+                <View style={{ flexDirection: 'row', backgroundColor: colors.bgGlass, borderRadius: 12, padding: 3, borderWidth: 1, borderColor: colors.borderSubtle, marginLeft: 8 }}>
+                  <TouchableOpacity
+                    onPress={() => setTtViewMode('day')}
+                    style={[{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 9 }, ttViewMode === 'day' && { backgroundColor: colors.accentBlue }]}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: ttViewMode === 'day' ? '#fff' : colors.textMuted }}>🗓️ Day</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setTtViewMode('week')}
+                    style={[{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 9 }, ttViewMode === 'week' && { backgroundColor: colors.accentBlue }]}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: ttViewMode === 'week' ? '#fff' : colors.textMuted }}>📊 Week Grid</Text>
+                  </TouchableOpacity>
                 </View>
+              </View>
+
+              {/* Live time & Today info strip */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.borderSubtle }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgGlass, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1, borderColor: colors.borderSubtle }}>
+                  <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: colors.present }} />
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textSecondary }}>
+                    {currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                  </Text>
+                </View>
+                <View style={{ backgroundColor: colors.accentBlueGlow, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1, borderColor: colors.accentBlue + '40' }}>
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: colors.accentBlue }}>📆 Today: {todayDayName}</Text>
+                </View>
+                {/* Today-only toggle (only in Day view) */}
+                {ttViewMode === 'day' && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowTodayOnly(!showTodayOnly);
+                      if (!showTodayOnly) setSelectedDay(todayDayName !== 'Sunday' && todayDayName !== 'Saturday' ? todayDayName : 'Monday');
+                    }}
+                    style={[{
+                      paddingHorizontal: 10,
+                      paddingVertical: 5,
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                    },
+                    showTodayOnly
+                      ? { backgroundColor: '#22c55e20', borderColor: colors.present }
+                      : { backgroundColor: colors.bgGlass, borderColor: colors.borderSubtle }
+                    ]}
+                  >
+                    <Text style={{ fontSize: 10 }}>{showTodayOnly ? '✅' : '⚡'}</Text>
+                    <Text style={{ fontSize: 10, fontWeight: '800', color: showTodayOnly ? colors.present : colors.textMuted }}>
+                      {showTodayOnly ? 'Showing Today Only' : 'Today Shortcut'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
 
-            {/* Day Selector Pills */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                {TIMETABLE.map(t => (
-                  <TouchableOpacity
-                    key={t.day}
-                    style={[
-                      styles.dayPill,
-                      { backgroundColor: colors.bgCard, borderColor: colors.borderSubtle },
-                      selectedDay === t.day && { backgroundColor: colors.accentBlue, borderColor: colors.accentBlue }
-                    ]}
-                    onPress={() => setSelectedDay(t.day)}
-                  >
-                    <Text style={[
-                      styles.dayPillText,
-                      { color: colors.textSecondary },
-                      selectedDay === t.day && { color: '#FFFFFF', fontWeight: '800' }
-                    ]}>
-                      {t.day}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
+            {/* ── LIVE CURRENT SESSION BANNER ── */}
+            {(() => {
+              const activeNowClass = todaySchedule.find(cls => isCurrentClassForDay(cls, todayDayName));
+              const upcomingNextClass = todaySchedule.find(cls => !isPastClass(cls, todayDayName) && !isCurrentClassForDay(cls, todayDayName));
+              const liveAttBadge = activeNowClass ? getClassAttendanceBadge(activeNowClass, todayDayName) : null;
 
-            {/* Class Cards for Selected Day */}
-            {currentSchedule.map((cls, index) => (
-              <View key={index} style={[styles.ttClassCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSubtle }]}>
-                <View style={[styles.ttTimeCol, { backgroundColor: colors.bgGlass, borderRadius: 12, padding: 10, borderRightWidth: 0, justifyContent: 'center' }]}>
-                  <Text style={{ fontSize: 14, marginBottom: 2 }}>⏰</Text>
-                  <Text style={{ fontSize: 11, fontWeight: '800', color: colors.accentBlue }}>{cls.time}</Text>
-                </View>
-
-                <View style={styles.ttMainCol}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <Text style={{ fontSize: 15, fontWeight: '800', color: colors.textPrimary }}>{cls.subject}</Text>
-                    <View style={[styles.pctBadge, { backgroundColor: colors.bgGlass, paddingHorizontal: 6, paddingVertical: 2 }]}>
-                      <Text style={{ fontSize: 9, fontWeight: '700', color: colors.textMuted }}>Period {index + 1}</Text>
+              if (activeNowClass) {
+                return (
+                  <View style={{
+                    backgroundColor: colors.accentBlueGlow,
+                    borderRadius: 16,
+                    padding: 14,
+                    borderWidth: 1.5,
+                    borderColor: colors.accentBlue,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}>
+                    <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: colors.accentBlue, alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ fontSize: 22 }}>🔴</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={{ fontSize: 10, fontWeight: '900', color: colors.accentBlue, letterSpacing: 0.5 }}>LIVE CLASS RIGHT NOW</Text>
+                        <View style={{ backgroundColor: liveAttBadge?.bg || colors.accentBlue, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, borderWidth: 1, borderColor: liveAttBadge?.border || colors.accentBlue }}>
+                          <Text style={{ fontSize: 8, fontWeight: '900', color: liveAttBadge?.color || '#FFF' }}>{liveAttBadge?.badgeText || 'ONGOING'}</Text>
+                        </View>
+                      </View>
+                      <Text style={{ fontSize: 15, fontWeight: '900', color: colors.textPrimary, marginTop: 1 }}>{activeNowClass.subject}</Text>
+                      <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                        👨‍🏫 {activeNowClass.teacher} • 📍 {activeNowClass.room} ({activeNowClass.time})
+                      </Text>
                     </View>
                   </View>
-                  <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 6 }}>👨‍🏫 {cls.teacher}</Text>
-                  <View style={{ backgroundColor: colors.bgGlass, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start' }}>
-                    <Text style={{ fontSize: 10, color: colors.textMuted, fontWeight: '700' }}>📍 Room: {cls.room}</Text>
+                );
+              } else if (upcomingNextClass && todayDayName !== 'Sunday' && todayDayName !== 'Saturday') {
+                return (
+                  <View style={{
+                    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                    borderRadius: 16,
+                    padding: 14,
+                    borderWidth: 1,
+                    borderColor: 'rgba(245, 158, 11, 0.3)',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}>
+                    <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: COLORS.warning, alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ fontSize: 22 }}>⏭️</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 10, fontWeight: '900', color: COLORS.warning, letterSpacing: 0.5 }}>UPCOMING NEXT CLASS</Text>
+                      <Text style={{ fontSize: 14, fontWeight: '900', color: colors.textPrimary, marginTop: 1 }}>{upcomingNextClass.subject}</Text>
+                      <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                        👨‍🏫 {upcomingNextClass.teacher} • 📍 {upcomingNextClass.room} ({upcomingNextClass.time})
+                      </Text>
+                    </View>
                   </View>
+                );
+              }
+              return null;
+            })()}
+
+            {/* ── DAY VIEW (Professional Timeline Cards) ── */}
+            {ttViewMode === 'day' && (
+              <View style={{ gap: 12 }}>
+                {/* Day Selector Pills */}
+                {!showTodayOnly && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 2 }}>
+                      {activeScheduleList.map(t => {
+                        const isToday = t.day === todayDayName;
+                        const isSelected = selectedDay === t.day;
+                        return (
+                          <TouchableOpacity
+                            key={t.day}
+                            onPress={() => setSelectedDay(t.day)}
+                            style={[{
+                              paddingHorizontal: 16,
+                              paddingVertical: 10,
+                              borderRadius: 14,
+                              borderWidth: isToday ? 2 : 1.5,
+                              alignItems: 'center',
+                              minWidth: 84,
+                            },
+                            isSelected
+                              ? { backgroundColor: colors.accentBlue, borderColor: colors.accentBlue }
+                              : isToday
+                              ? { backgroundColor: colors.accentBlueGlow, borderColor: colors.accentBlue }
+                              : { backgroundColor: colors.bgCard, borderColor: colors.borderSubtle }
+                            ]}
+                          >
+                            <Text style={{ fontSize: 13, fontWeight: '900', color: isSelected ? '#fff' : isToday ? colors.accentBlue : colors.textSecondary }}>
+                              {t.day.slice(0, 3)}
+                            </Text>
+                            {isToday && (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3 }}>
+                                <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: isSelected ? '#fff' : colors.accentBlue }} />
+                                <Text style={{ fontSize: 8, fontWeight: '800', color: isSelected ? '#fff' : colors.accentBlue }}>TODAY</Text>
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+                )}
+
+                {/* Day Timeline Header Stats */}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 4 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '800', color: colors.textSecondary }}>
+                    📅 Schedule for <Text style={{ color: colors.accentBlue }}>{showTodayOnly ? todayDayName : selectedDay}</Text>
+                  </Text>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textMuted }}>
+                    {(showTodayOnly ? todaySchedule : currentSchedule).length} Periods Total
+                  </Text>
                 </View>
+
+                {/* Timeline Class Cards */}
+                {(showTodayOnly ? todaySchedule : currentSchedule).length === 0 ? (
+                  <View style={{ alignItems: 'center', paddingVertical: 40, backgroundColor: colors.bgCard, borderRadius: 18, borderWidth: 1, borderColor: colors.borderSubtle }}>
+                    <Text style={{ fontSize: 40, marginBottom: 10 }}>🎉</Text>
+                    <Text style={{ fontSize: 15, fontWeight: '900', color: colors.textPrimary }}>No Classes Scheduled</Text>
+                    <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}>Enjoy your holiday or free time!</Text>
+                  </View>
+                ) : (
+                  (showTodayOnly ? todaySchedule : currentSchedule).map((cls, index) => {
+                    const dayForCls = showTodayOnly ? todayDayName : selectedDay;
+                    const isCurrent = isCurrentClassForDay(cls, dayForCls);
+                    const isPast = isPastClass(cls, dayForCls);
+                    const attBadge = getClassAttendanceBadge(cls, dayForCls);
+
+                    // Palette for left border accent
+                    const colorsPalette = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EC4899', '#06B6D4'];
+                    const cardAccentColor = colorsPalette[index % colorsPalette.length];
+
+                    return (
+                      <View key={index} style={{ flexDirection: 'row', alignItems: 'stretch', gap: 10 }}>
+                        {/* Timeline Node & Connector Line */}
+                        <View style={{ alignItems: 'center', width: 20 }}>
+                          <View style={[{
+                            width: 14,
+                            height: 14,
+                            borderRadius: 7,
+                            borderWidth: 2,
+                            marginTop: 18,
+                          },
+                          isCurrent
+                            ? { backgroundColor: colors.accentBlue, borderColor: '#FFF' }
+                            : attBadge?.type === 'present'
+                            ? { backgroundColor: colors.present, borderColor: colors.presentBg }
+                            : attBadge?.type === 'absent'
+                            ? { backgroundColor: colors.absent, borderColor: colors.absentBg }
+                            : isPast
+                            ? { backgroundColor: '#F59E0B', borderColor: 'rgba(245,158,11,0.2)' }
+                            : { backgroundColor: colors.bgCard, borderColor: colors.borderSubtle }
+                          ]} />
+                          {index < (showTodayOnly ? todaySchedule : currentSchedule).length - 1 && (
+                            <View style={{ flex: 1, width: 2, backgroundColor: colors.borderSubtle, marginVertical: 4 }} />
+                          )}
+                        </View>
+
+                        {/* Card Content */}
+                        <View
+                          style={[{
+                            flex: 1,
+                            borderRadius: 18,
+                            borderWidth: isCurrent ? 2 : 1,
+                            overflow: 'hidden',
+                            shadowColor: isCurrent ? colors.accentBlue : '#000',
+                            shadowOffset: { width: 0, height: isCurrent ? 4 : 1 },
+                            shadowOpacity: isCurrent ? 0.2 : 0.05,
+                            shadowRadius: isCurrent ? 8 : 4,
+                            elevation: isCurrent ? 5 : 2,
+                          },
+                          isCurrent
+                            ? { backgroundColor: colors.accentBlueGlow, borderColor: colors.accentBlue }
+                            : isPast
+                            ? { backgroundColor: colors.bgCard, borderColor: colors.borderSubtle }
+                            : { backgroundColor: colors.bgCard, borderColor: colors.borderSubtle }
+                          ]}
+                        >
+                          {/* Left Accent Stripe */}
+                          <View style={{ flexDirection: 'row' }}>
+                            <View style={{ width: 5, backgroundColor: isCurrent ? colors.accentBlue : cardAccentColor }} />
+
+                            <View style={{ flex: 1, padding: 14 }}>
+                              {/* Header: Time & Attendance Status Badge */}
+                              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                  <Text style={{ fontSize: 13 }}>⏰</Text>
+                                  <Text style={{ fontSize: 12, fontWeight: '800', color: isCurrent ? colors.accentBlue : colors.textPrimary }}>
+                                    {cls.time}
+                                  </Text>
+                                </View>
+
+                                {/* Attendance Tag */}
+                                {attBadge && (
+                                  <View style={{
+                                    backgroundColor: attBadge.bg,
+                                    borderColor: attBadge.border,
+                                    borderWidth: 1,
+                                    paddingHorizontal: 9,
+                                    paddingVertical: 3,
+                                    borderRadius: 10,
+                                  }}>
+                                    <Text style={{ fontSize: 10, fontWeight: '900', color: attBadge.color }}>
+                                      {attBadge.badgeText}
+                                    </Text>
+                                  </View>
+                                )}
+                              </View>
+
+                              {/* Subject Title */}
+                              <Text style={{ fontSize: 16, fontWeight: '900', color: isCurrent ? colors.accentBlue : colors.textPrimary, marginBottom: 6 }}>
+                                {cls.subject}
+                              </Text>
+
+                              {/* Teacher & Room Meta Strip */}
+                              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: 2 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.bgGlass, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                                  <Text style={{ fontSize: 11 }}>👨‍🏫</Text>
+                                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textSecondary }}>{cls.teacher}</Text>
+                                </View>
+
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.bgGlass, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                                  <Text style={{ fontSize: 11 }}>📍</Text>
+                                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textMuted }}>{cls.room}</Text>
+                                </View>
+                              </View>
+
+                              {/* Attendance Full Status Sub-Banner */}
+                              {attBadge && (
+                                <View style={{
+                                  marginTop: 10,
+                                  paddingTop: 8,
+                                  borderTopWidth: 1,
+                                  borderTopColor: colors.borderSubtle,
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  justify: 'space-between',
+                                }}>
+                                  <Text style={{ fontSize: 10, fontWeight: '700', color: attBadge.color }}>
+                                    {attBadge.fullLabel}
+                                  </Text>
+                                  <View style={{ backgroundColor: colors.bgGlass, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                                    <Text style={{ fontSize: 9, fontWeight: '800', color: colors.textMuted }}>Period {index + 1}</Text>
+                                  </View>
+                                </View>
+                              )}
+                            </View>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })
+                )}
               </View>
-            ))}
+            )}
+
+            {/* ── WEEK VIEW (Real Timetable Grid Matrix) ── */}
+            {ttViewMode === 'week' && (
+              <View style={[{
+                backgroundColor: colors.bgCard,
+                borderRadius: 20,
+                padding: 14,
+                borderWidth: 1,
+                borderColor: colors.borderSubtle,
+                gap: 12,
+              }]}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={{ fontSize: 16 }}>📊</Text>
+                    <Text style={{ fontSize: 15, fontWeight: '900', color: colors.textPrimary }}>Weekly Timetable Grid</Text>
+                  </View>
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: colors.accentBlue }}>
+                    👈 Scroll horizontal for all days 👉
+                  </Text>
+                </View>
+
+                {/* Horizontal Scroll Matrix */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={true} style={{ borderRadius: 14 }}>
+                  <View style={{ flexDirection: 'column' }}>
+
+                    {/* Table Header Row: PERIOD / DAY + MON, TUE, WED, THU, FRI, SAT */}
+                    <View style={{ flexDirection: 'row', backgroundColor: colors.bgGlass, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 4, borderWidth: 1, borderColor: colors.borderSubtle, marginBottom: 8 }}>
+                      <View style={{ width: 95, paddingHorizontal: 6, justifyContent: 'center', alignItems: 'center' }}>
+                        <Text style={{ fontSize: 10, fontWeight: '900', color: colors.textMuted, letterSpacing: 0.5 }}>PERIOD / TIME</Text>
+                      </View>
+
+                      {activeScheduleList.map(item => {
+                        const isToday = item.day === todayDayName;
+                        return (
+                          <View
+                            key={item.day}
+                            style={[{
+                              width: 135,
+                              paddingVertical: 8,
+                              paddingHorizontal: 8,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderRadius: 10,
+                              marginHorizontal: 2,
+                            },
+                            isToday
+                              ? { backgroundColor: colors.accentBlue }
+                              : { backgroundColor: colors.bgSecondary }
+                            ]}
+                          >
+                            <Text style={{ fontSize: 12, fontWeight: '900', color: isToday ? '#FFF' : colors.textPrimary }}>
+                              {item.day.slice(0, 3).toUpperCase()}
+                            </Text>
+                            {isToday && (
+                              <View style={{ backgroundColor: 'rgba(255,255,255,0.3)', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, marginTop: 2 }}>
+                                <Text style={{ fontSize: 8, fontWeight: '900', color: '#FFF' }}>TODAY</Text>
+                              </View>
+                            )}
+                          </View>
+                        );
+                      })}
+                    </View>
+
+                    {/* Table Period Rows */}
+                    {Array.from({ length: Math.max(...activeScheduleList.map(s => s.classes.length), 4) }).map((_, periodIdx) => {
+                      // Retrieve period time string from first day
+                      const sampleClass = activeScheduleList.find(d => d.classes[periodIdx])?.classes[periodIdx];
+                      const timeSlot = sampleClass ? sampleClass.time : `Period ${periodIdx + 1}`;
+
+                      return (
+                        <View key={periodIdx} style={{ flexDirection: 'row', alignItems: 'stretch', marginBottom: 6 }}>
+                          {/* Period Label Column */}
+                          <View style={{
+                            width: 95,
+                            backgroundColor: colors.bgGlass,
+                            borderRadius: 12,
+                            padding: 8,
+                            justify: 'center',
+                            alignItems: 'center',
+                            borderWidth: 1,
+                            borderColor: colors.borderSubtle,
+                            marginRight: 4
+                          }}>
+                            <View style={{ backgroundColor: colors.accentBlueGlow, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginBottom: 3 }}>
+                              <Text style={{ fontSize: 10, fontWeight: '900', color: colors.accentBlue }}>P{periodIdx + 1}</Text>
+                            </View>
+                            <Text style={{ fontSize: 9, fontWeight: '700', color: colors.textMuted, textAlign: 'center', lineHeight: 12 }}>
+                              {timeSlot.replace(/\s*-\s*/, '\n')}
+                            </Text>
+                          </View>
+
+                          {/* Day Cells for this Period */}
+                          {activeScheduleList.map(item => {
+                            const cls = item.classes[periodIdx];
+                            const isToday = item.day === todayDayName;
+                            const isCurrent = cls ? isCurrentClassForDay(cls, item.day) : false;
+                            const attBadge = cls ? getClassAttendanceBadge(cls, item.day) : null;
+
+                            const palette = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EC4899', '#06B6D4'];
+                            const subjectColor = cls ? palette[periodIdx % palette.length] : colors.textMuted;
+
+                            return (
+                              <View
+                                key={item.day}
+                                style={[{
+                                  width: 135,
+                                  minHeight: 92,
+                                  borderRadius: 12,
+                                  padding: 8,
+                                  marginHorizontal: 2,
+                                  borderWidth: isCurrent ? 2 : 1,
+                                  justifyContent: 'space-between',
+                                },
+                                isCurrent
+                                  ? { backgroundColor: colors.accentBlueGlow, borderColor: colors.accentBlue }
+                                  : isToday
+                                  ? { backgroundColor: colors.bgCard, borderColor: colors.accentBlue + '50' }
+                                  : { backgroundColor: colors.bgCard, borderColor: colors.borderSubtle }
+                                ]}
+                              >
+                                {cls ? (
+                                  <>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                                      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: subjectColor }} />
+                                      <Text style={{ fontSize: 11, fontWeight: '900', color: isCurrent ? colors.accentBlue : colors.textPrimary, flex: 1 }} numberOfLines={2}>
+                                        {cls.subject}
+                                      </Text>
+                                    </View>
+
+                                    <Text style={{ fontSize: 9, color: colors.textSecondary }} numberOfLines={1}>
+                                      👨‍🏫 {cls.teacher}
+                                    </Text>
+
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                                      <View style={{ backgroundColor: colors.bgGlass, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 }}>
+                                        <Text style={{ fontSize: 8, fontWeight: '700', color: colors.textMuted }}>📍 {cls.room}</Text>
+                                      </View>
+                                      {attBadge && (
+                                        <View style={{ backgroundColor: attBadge.bg, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: attBadge.border }}>
+                                          <Text style={{ fontSize: 8, fontWeight: '900', color: attBadge.color }}>
+                                            {attBadge.badgeText}
+                                          </Text>
+                                        </View>
+                                      )}
+                                    </View>
+                                  </>
+                                ) : (
+                                  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                                    <Text style={{ fontSize: 10, color: colors.textMuted }}>Free Slot</Text>
+                                  </View>
+                                )}
+                              </View>
+                            );
+                          })}
+                        </View>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              </View>
+            )}
+
           </View>
         )}
 
@@ -996,8 +1666,8 @@ export default function StudentDashboardScreen({ onNavigate }) {
                 <View style={[styles.onlineDot, { backgroundColor: colors.present }]} />
               </View>
 
-              <Text style={[styles.bigName, { color: colors.textPrimary }]}>{user?.name || 'Arjun Reddy'}</Text>
-              <Text style={[styles.bigRoll, { color: colors.accentBlue }]}>Roll No: {rollNo} • CSE 3rd Year</Text>
+              <Text style={[styles.bigName, { color: colors.textPrimary }]}>{user?.name || 'Student'}</Text>
+              <Text style={[styles.bigRoll, { color: colors.accentBlue }]}>Roll No: {rollNo || '—'} • {user?.department || 'CSE'} {user?.year || '3rd Year'}</Text>
 
               {/* Verified & Server Pill */}
               <View style={styles.badgeRow}>
@@ -1012,17 +1682,17 @@ export default function StudentDashboardScreen({ onNavigate }) {
               {/* Quick Stat KPI Strip for Student */}
               <View style={[styles.profileStatStrip, { backgroundColor: colors.bgGlass, borderColor: colors.borderSubtle }]}>
                 <View style={styles.profileStatItem}>
-                  <Text style={[styles.profileStatNum, { color: colors.present }]}>89.2%</Text>
+                  <Text style={[styles.profileStatNum, { color: overallPct >= 75 ? colors.present : colors.absent }]}>{overallPct}%</Text>
                   <Text style={[styles.profileStatLbl, { color: colors.textMuted }]}>Attendance</Text>
                 </View>
                 <View style={[styles.profileStatDivider, { backgroundColor: colors.borderSubtle }]} />
                 <View style={styles.profileStatItem}>
-                  <Text style={[styles.profileStatNum, { color: colors.accentBlue }]}>#4</Text>
-                  <Text style={[styles.profileStatLbl, { color: colors.textMuted }]}>Class Rank</Text>
+                  <Text style={[styles.profileStatNum, { color: colors.accentBlue }]}>{totalClasses > 0 ? (overallPct >= 85 ? 'Top 5%' : overallPct >= 75 ? 'Top 20%' : 'Regular') : '—'}</Text>
+                  <Text style={[styles.profileStatLbl, { color: colors.textMuted }]}>Academic Status</Text>
                 </View>
                 <View style={[styles.profileStatDivider, { backgroundColor: colors.borderSubtle }]} />
                 <View style={styles.profileStatItem}>
-                  <Text style={[styles.profileStatNum, { color: colors.accentPurple }]}>5</Text>
+                  <Text style={[styles.profileStatNum, { color: colors.accentPurple }]}>{activeTableData.length}</Text>
                   <Text style={[styles.profileStatLbl, { color: colors.textMuted }]}>Subjects</Text>
                 </View>
               </View>
@@ -1049,17 +1719,19 @@ export default function StudentDashboardScreen({ onNavigate }) {
 
               <View style={[styles.infoRow, { borderBottomColor: colors.borderSubtle }]}>
                 <Text style={[styles.infoLbl, { color: colors.textMuted }]}>Student Email</Text>
-                <Text style={[styles.infoVal, { color: colors.textPrimary }]}>{rollNo.toLowerCase()}@{(user?.selectedCollegeCode || 'vjit').toLowerCase()}.edu.in</Text>
+                <Text style={[styles.infoVal, { color: colors.textPrimary }]}>{(rollNo || 'student').toLowerCase()}@{(user?.selectedCollegeCode || 'vjit').toLowerCase()}.edu.in</Text>
               </View>
 
               <View style={[styles.infoRow, { borderBottomColor: colors.borderSubtle }]}>
                 <Text style={[styles.infoLbl, { color: colors.textMuted }]}>Parent Contact</Text>
-                <Text style={[styles.infoVal, { color: colors.textPrimary }]}>+91 98765 12345</Text>
+                <Text style={[styles.infoVal, { color: colors.textPrimary }]}>{user?.phone || user?.parentPhone || '+91 98765 12345'}</Text>
               </View>
 
               <View style={[styles.infoRow, { borderBottomColor: colors.borderSubtle }]}>
                 <Text style={[styles.infoLbl, { color: colors.textMuted }]}>Exam Eligibility</Text>
-                <Text style={[styles.infoVal, { color: colors.present }]}>🟢 Eligible (&gt; 75% Target)</Text>
+                <Text style={[styles.infoVal, { color: overallPct >= 75 ? colors.present : colors.absent }]}>
+                  {overallPct >= 75 ? '🟢 Eligible (> 75% Target)' : '⚠️ Low Attendance (< 75% Target)'}
+                </Text>
               </View>
             </View>
 
@@ -1183,7 +1855,7 @@ export default function StudentDashboardScreen({ onNavigate }) {
                 </View>
 
                 {/* Table Data Rows */}
-                {MONTHLY_TABLE_DATA.map((row) => {
+                {activeTableData.map((row) => {
                   const pctNum = parseFloat(row.pct);
                   const isSafe = pctNum >= 75;
                   const isWarn = pctNum >= 60 && pctNum < 75;
@@ -1241,7 +1913,7 @@ export default function StudentDashboardScreen({ onNavigate }) {
                   );
                 })}
 
-                {/* Bottom TOTAL Summary Row (Exact Image 1 / Image 4 format) */}
+                {/* Bottom TOTAL Summary Row */}
                 <View style={{
                   flexDirection: 'row',
                   alignItems: 'center',
@@ -1257,14 +1929,14 @@ export default function StudentDashboardScreen({ onNavigate }) {
                     TOTAL SUMMARY
                   </Text>
                   <Text style={{ width: 50, fontSize: 12, fontWeight: '900', color: colors.textPrimary, textAlign: 'center' }}>
-                    {MONTHLY_TABLE_DATA.reduce((a, b) => a + b.held, 0)}
+                    {totalAnalysisClasses}
                   </Text>
                   <Text style={{ width: 54, fontSize: 12, fontWeight: '900', color: colors.present, textAlign: 'center' }}>
-                    {MONTHLY_TABLE_DATA.reduce((a, b) => a + b.attended, 0)}
+                    {totalAnalysisAttended}
                   </Text>
                   <View style={{ width: 62, alignItems: 'flex-end' }}>
-                    <Text style={{ fontSize: 12, fontWeight: '900', color: colors.present }}>
-                      59.70%
+                    <Text style={{ fontSize: 12, fontWeight: '900', color: overallAnalysisPct >= 75 ? colors.present : colors.absent }}>
+                      {overallAnalysisPctFormatted}%
                     </Text>
                   </View>
                 </View>

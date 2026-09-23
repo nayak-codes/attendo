@@ -2,7 +2,7 @@
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(6, 11, 24, 0.85);
+  background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-subtle);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);

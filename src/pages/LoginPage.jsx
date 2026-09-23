@@ -102,12 +102,8 @@ const LoginPage = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
         >
-          <div className="login-logo">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
-          <h1 className="login-title">Edu<span>Track</span></h1>
+          <img src="/app-logo.png" alt="Knapsack Logo" style={{ width: 48, height: 48, borderRadius: 12, objectFit: 'contain', marginBottom: 8 }} />
+          <h1 className="login-title">Knap<span>sack</span></h1>
           <p className="login-subtitle">Multi-College Smart Attendance Cloud Platform</p>
         </motion.div>
 

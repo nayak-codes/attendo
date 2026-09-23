@@ -10,11 +10,24 @@ export const AuthProvider = ({ children }) => {
   const [colleges, setColleges] = useState(MOCK_COLLEGES);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
-  const [theme, setTheme] = useState('dark');
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem('smart_attendance_theme') || 'dark';
+    } catch (e) {
+      return 'dark';
+    }
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
 
   const toggleTheme = () => {
     const nextTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(nextTheme);
+    try {
+      localStorage.setItem('smart_attendance_theme', nextTheme);
+    } catch (e) {}
     document.documentElement.setAttribute('data-theme', nextTheme);
   };
 
@@ -128,20 +141,65 @@ export const AuthProvider = ({ children }) => {
       }
     }
 
+    const cleanId = (collegeId || '').trim();
+    const cleanPass = (password || '').trim();
+    const upperId = cleanId.toUpperCase();
+
     try {
-      // Try Firestore lookup (case exact or upper)
+      // Query users by role
       const q = query(
         collection(db, 'users'),
-        where('collegeId', '==', collegeId),
         where('role', '==', role)
       );
       const snapshot = await getDocs(q);
 
       if (!snapshot.empty) {
-        const userData = snapshot.docs[0].data();
-        const uid = snapshot.docs[0].id;
+        const matchedDoc = snapshot.docs.find(d => {
+          const data = d.data();
+          const cId = (data.collegeId || '').toUpperCase().trim();
+          const rNo = (data.rollNo || '').toUpperCase().trim();
+          return cId === upperId || rNo === upperId;
+        });
 
-        if (userData.password !== password && password !== 'admin123') {
+        if (matchedDoc) {
+          const userData = matchedDoc.data();
+          const uid = matchedDoc.id;
+
+          if (userData.password !== cleanPass && cleanPass !== 'admin123') {
+            setAuthLoading(false);
+            return { success: false, error: 'Wrong password' };
+          }
+
+          const userObj = {
+            ...userData,
+            uid,
+            id: uid,
+            role,
+            selectedCollegeCode: selectedCollegeCode || userData.collegeCode || 'VJIT'
+          };
+          setUser(userObj);
+          try { localStorage.setItem('smart_attendance_user', JSON.stringify(userObj)); } catch (e) {}
+          setAuthLoading(false);
+          return { success: true, user: userObj };
+        }
+      }
+
+      // Also query across all users if role tag differed
+      const qAll = query(collection(db, 'users'));
+      const allSnapshot = await getDocs(qAll);
+      const matchedDocAnyRole = allSnapshot.docs.find(d => {
+        const data = d.data();
+        const cId = (data.collegeId || '').toUpperCase().trim();
+        const rNo = (data.rollNo || '').toUpperCase().trim();
+        return cId === upperId || rNo === upperId;
+      });
+
+      if (matchedDocAnyRole) {
+        const userData = matchedDocAnyRole.data();
+        const uid = matchedDocAnyRole.id;
+        const actualRole = userData.role || role;
+
+        if (userData.password !== cleanPass && cleanPass !== 'admin123') {
           setAuthLoading(false);
           return { success: false, error: 'Wrong password' };
         }
@@ -150,7 +208,7 @@ export const AuthProvider = ({ children }) => {
           ...userData,
           uid,
           id: uid,
-          role,
+          role: actualRole,
           selectedCollegeCode: selectedCollegeCode || userData.collegeCode || 'VJIT'
         };
         setUser(userObj);

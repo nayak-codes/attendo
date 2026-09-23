@@ -52,51 +52,23 @@ export const MOCK_YEARS = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
 
 export const MOCK_STUDENT_ATTENDANCE = {
   'CE21001': {
-    'Data Structures': { total: 32, attended: 28 },
-    'DBMS': { total: 28, attended: 25 },
-    'Operating Systems': { total: 30, attended: 22 },
-    'Computer Networks': { total: 25, attended: 23 },
-    'Software Engineering': { total: 20, attended: 19 },
+    'Data Structures': { total: 0, attended: 0 },
+    'DBMS': { total: 0, attended: 0 },
+    'Operating Systems': { total: 0, attended: 0 },
+    'Computer Networks': { total: 0, attended: 0 },
+    'Software Engineering': { total: 0, attended: 0 },
   },
   'CE21002': {
-    'Data Structures': { total: 32, attended: 30 },
-    'DBMS': { total: 28, attended: 27 },
-    'Operating Systems': { total: 30, attended: 26 },
-    'Computer Networks': { total: 25, attended: 24 },
-    'Software Engineering': { total: 20, attended: 20 },
+    'Data Structures': { total: 0, attended: 0 },
+    'DBMS': { total: 0, attended: 0 },
+    'Operating Systems': { total: 0, attended: 0 },
+    'Computer Networks': { total: 0, attended: 0 },
+    'Software Engineering': { total: 0, attended: 0 },
   }
 };
 
-// Generate calendar history data for Arjun (CE21001) for September 2026
-// Keys are 'YYYY-MM-DD', values are 'present' | 'absent'
-const sep = (d) => `2026-09-${String(d).padStart(2, '0')}`;
-export const MOCK_CALENDAR_DATA = {
-  'CE21001': {
-    // September 2026 - Mon to Fri only
-    [sep(1)]: 'present',
-    [sep(2)]: 'present',
-    [sep(3)]: 'present',
-    [sep(4)]: 'present',
-    [sep(5)]: 'present',
-    [sep(7)]: 'present',
-    [sep(8)]: 'absent',
-    [sep(9)]: 'present',
-    [sep(10)]: 'present',
-    [sep(11)]: 'present',
-  },
-  'CE21002': {
-    [sep(1)]: 'present',
-    [sep(2)]: 'present',
-    [sep(3)]: 'present',
-    [sep(4)]: 'present',
-    [sep(5)]: 'present',
-    [sep(7)]: 'present',
-    [sep(8)]: 'present',
-    [sep(9)]: 'present',
-    [sep(10)]: 'absent',
-    [sep(11)]: 'present',
-  }
-};
+// Calendar history data (empty default - attendance tracked live from now on)
+export const MOCK_CALENDAR_DATA = {};
 
 export const getInitials = (name) => {
   if (!name) return 'ST';

@@ -1,22 +1,28 @@
+/* ==========================================
+   EduTrack Timetable Builder Styles
+   ========================================== */
+
 .timetable-builder {
   animation: fadeIn 0.3s ease;
 }
 
 .tt-loading {
-  color: #9ca3af;
+  color: var(--text-secondary);
   text-align: center;
-  padding: 40px;
+  padding: 60px;
+  font-size: 14px;
 }
 
 .tt-toast {
-  background: rgba(16, 185, 129, 0.15);
-  border: 1px solid rgba(16, 185, 129, 0.4);
-  color: #34d399;
+  background: var(--present-bg);
+  border: 1px solid var(--border-present);
+  color: var(--present-color);
   padding: 12px 18px;
   border-radius: 12px;
   margin-bottom: 20px;
   font-weight: 700;
   font-size: 14px;
+  box-shadow: var(--shadow-sm);
 }
 
 /* Header */
@@ -32,13 +38,14 @@
 .tt-title {
   font-size: 22px;
   font-weight: 800;
-  color: #fff;
+  color: var(--text-primary);
   margin: 0 0 6px 0;
+  font-family: 'Space Grotesk', sans-serif;
 }
 
 .tt-sub {
   font-size: 13px;
-  color: #9ca3af;
+  color: var(--text-secondary);
   margin: 0;
 }
 
@@ -48,23 +55,26 @@
 }
 
 .btn-tt-config {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: #d1d5db;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
   padding: 10px 16px;
   border-radius: 12px;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
+  box-shadow: var(--shadow-sm);
 }
 
 .btn-tt-config:hover {
-  background: rgba(255,255,255,0.12);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+  transform: translateY(-1px);
 }
 
 .btn-tt-save {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  background: linear-gradient(135deg, var(--accent-blue), #2563eb);
   border: none;
   color: white;
   padding: 10px 20px;
@@ -73,6 +83,7 @@
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
+  box-shadow: var(--shadow-blue);
 }
 
 .btn-tt-save.saved {
@@ -90,22 +101,23 @@
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
-  background: rgba(17,24,39,0.6);
-  border: 1px solid rgba(255,255,255,0.07);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
-  padding: 10px 16px;
+  padding: 12px 18px;
   margin-bottom: 20px;
-  font-size: 12px;
-  color: #9ca3af;
+  font-size: 13px;
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-sm);
 }
 
 .tt-config-summary strong {
-  color: #60a5fa;
+  color: var(--accent-blue);
 }
 
 .tt-config-edit-link {
   margin-left: auto;
-  color: #60a5fa;
+  color: var(--accent-blue);
   cursor: pointer;
   font-weight: 700;
   font-size: 12px;
@@ -123,8 +135,8 @@
 .tt-selector-label {
   display: block;
   font-size: 12px;
-  font-weight: 700;
-  color: #6b7280;
+  font-weight: 800;
+  color: var(--text-muted);
   margin-bottom: 10px;
   letter-spacing: 0.5px;
 }
@@ -136,11 +148,11 @@
 }
 
 .tt-sec-btn {
-  background: rgba(17,24,39,0.8);
-  border: 1px solid rgba(255,255,255,0.1);
-  color: #9ca3af;
-  padding: 8px 16px;
-  border-radius: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  padding: 9px 18px;
+  border-radius: var(--radius-full);
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
@@ -148,30 +160,40 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  box-shadow: var(--shadow-sm);
 }
 
 .tt-sec-btn.active {
-  background: rgba(59,130,246,0.2);
-  border-color: #3b82f6;
-  color: #60a5fa;
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+}
+
+.tt-sec-btn.active .tt-sec-year {
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .tt-sec-btn:hover:not(.active) {
-  border-color: rgba(255,255,255,0.2);
-  color: #d1d5db;
+  border-color: var(--accent-blue);
+  color: var(--text-primary);
+  transform: translateY(-1px);
 }
 
 .tt-sec-year {
-  font-size: 10px;
-  color: #6b7280;
-  font-weight: 500;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  background: var(--bg-secondary);
+  padding: 2px 7px;
+  border-radius: 4px;
 }
 
 .tt-no-sections {
-  color: #f59e0b;
+  color: var(--absent-color);
   font-size: 13px;
-  background: rgba(245,158,11,0.1);
-  border: 1px solid rgba(245,158,11,0.25);
+  background: var(--absent-bg);
+  border: 1px solid var(--border-absent);
   padding: 10px 16px;
   border-radius: 10px;
   margin: 0;
@@ -181,7 +203,9 @@
 .tt-grid-wrapper {
   overflow-x: auto;
   border-radius: 16px;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
 }
 
 .tt-grid {
@@ -191,7 +215,7 @@
 
 /* Cells */
 .tt-cell {
-  border: 1px solid rgba(255,255,255,0.06);
+  border: 1px solid var(--border-subtle);
   padding: 0;
   min-height: 70px;
   display: flex;
@@ -200,28 +224,28 @@
 }
 
 .tt-corner {
-  background: rgba(0,0,0,0.4);
+  background: var(--bg-secondary);
   font-size: 10px;
   font-weight: 800;
-  color: #4b5563;
+  color: var(--text-muted);
   letter-spacing: 0.5px;
 }
 
 .tt-day-header {
-  background: rgba(17,24,39,0.9);
+  background: var(--bg-secondary);
   font-size: 12px;
   font-weight: 800;
-  color: #9ca3af;
+  color: var(--text-primary);
   letter-spacing: 1px;
 }
 
 .tt-period-label {
-  background: rgba(0,0,0,0.3);
+  background: var(--bg-secondary);
   flex-direction: column;
 }
 
 .lunch-label {
-  background: rgba(245, 158, 11, 0.05);
+  background: rgba(245, 158, 11, 0.08);
   min-height: 48px;
 }
 
@@ -235,13 +259,13 @@
 .period-num {
   font-size: 14px;
   font-weight: 800;
-  color: #60a5fa;
+  color: var(--accent-blue);
 }
 
 .slot-time {
   font-size: 10px;
-  color: #6b7280;
-  font-weight: 500;
+  color: var(--text-muted);
+  font-weight: 600;
 }
 
 .lunch-slot-label {
@@ -261,20 +285,20 @@
 }
 
 .data-cell:hover {
-  background: rgba(59, 130, 246, 0.08);
+  background: var(--bg-glass-hover);
 }
 
 .data-cell.has-data {
-  background: color-mix(in srgb, var(--cell-color) 12%, transparent);
-  border-color: color-mix(in srgb, var(--cell-color) 30%, transparent);
+  background: var(--present-bg);
+  border-color: var(--border-present);
 }
 
 .data-cell.empty-cell {
-  background: rgba(0,0,0,0.2);
+  background: var(--bg-card);
 }
 
 .data-cell.empty-cell:hover {
-  background: rgba(59,130,246,0.06);
+  background: var(--accent-blue-glow);
 }
 
 .cell-content {
@@ -290,16 +314,16 @@
 }
 
 .cell-subject {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
-  color: var(--cell-color, #60a5fa);
+  color: var(--text-primary);
   text-align: center;
   line-height: 1.3;
 }
 
 .cell-teacher {
-  font-size: 10px;
-  color: #9ca3af;
+  font-size: 11px;
+  color: var(--text-secondary);
   text-align: center;
 }
 
@@ -307,14 +331,14 @@
   position: absolute;
   top: 4px;
   right: 4px;
-  background: rgba(239,68,68,0.15);
-  border: none;
-  color: #ef4444;
-  width: 18px;
-  height: 18px;
+  background: var(--absent-bg);
+  border: 1px solid var(--border-absent);
+  color: var(--absent-color);
+  width: 20px;
+  height: 20px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 10px;
+  font-size: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -328,19 +352,19 @@
 
 .cell-add-hint {
   font-size: 11px;
-  color: #374151;
+  color: var(--text-muted);
   font-weight: 600;
 }
 
 .data-cell.empty-cell:hover .cell-add-hint {
-  color: #60a5fa;
+  color: var(--accent-blue);
 }
 
 .lunch-cell {
-  background: rgba(245,158,11,0.05);
+  background: rgba(245, 158, 11, 0.05);
   min-height: 48px;
   font-size: 11px;
-  color: #78716c;
+  color: var(--text-muted);
   font-style: italic;
 }
 
@@ -348,8 +372,8 @@
 .tt-no-section-selected {
   text-align: center;
   padding: 60px 40px;
-  background: rgba(17,24,39,0.5);
-  border: 1px dashed rgba(255,255,255,0.1);
+  background: var(--bg-card);
+  border: 1px dashed var(--border-subtle);
   border-radius: 20px;
 }
 
@@ -359,194 +383,193 @@
 }
 
 .tt-no-section-selected h3 {
-  color: #d1d5db;
+  color: var(--text-primary);
   font-size: 18px;
   margin: 0 0 8px 0;
 }
 
 .tt-no-section-selected p {
-  color: #6b7280;
+  color: var(--text-secondary);
   font-size: 14px;
   margin: 0;
 }
 
-/* Cell Modal */
-.cell-modal-content {
-  background: #111827;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 24px;
-  padding: 32px;
-  width: 100%;
-  max-width: 440px;
-  position: relative;
-  z-index: 1000;
+/* ==========================================
+   Timetable Modal Dialog Overlay Styles
+   ========================================== */
+
+.tt-modal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: rgba(15, 23, 42, 0.75) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 20px !important;
+  z-index: 999999 !important;
 }
 
-.cell-modal-time {
-  font-size: 12px;
-  color: #6b7280;
-  margin-top: -10px;
-  margin-bottom: 20px;
+.tt-modal-content {
+  background: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 20px !important;
+  padding: 24px 28px !important;
+  width: 100% !important;
+  max-width: 480px !important;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.45) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 16px !important;
+  z-index: 1000000 !important;
 }
 
-.cell-modal-time strong {
-  color: #60a5fa;
+.config-modal-content {
+  max-width: 560px !important;
 }
 
-/* Config modal extras */
-.period-count-selector {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.period-count-btn {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: #9ca3af;
-  padding: 8px 14px;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.period-count-btn.active {
-  background: #3b82f6;
-  border-color: #60a5fa;
-  color: white;
-}
-
-.config-preview-box {
-  background: rgba(0,0,0,0.3);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 12px;
-  padding: 16px;
-}
-
-.config-preview-timeline {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 8px;
-}
-
-.preview-slot {
-  background: rgba(59,130,246,0.12);
-  border: 1px solid rgba(59,130,246,0.25);
-  border-radius: 8px;
-  padding: 4px 8px;
-  font-size: 11px;
-  color: #93c5fd;
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-
-.preview-lunch {
-  background: rgba(245,158,11,0.12);
-  border-color: rgba(245,158,11,0.25);
-  color: #fcd34d;
-}
-
-/* Shared */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.7);
-  backdrop-filter: blur(6px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 999;
-  padding: 20px;
-}
-
-.modal-header {
+.tt-modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.modal-header h2 {
+.tt-modal-header h3 {
   font-size: 16px;
   font-weight: 800;
-  color: white;
+  color: var(--text-primary);
   margin: 0;
 }
 
-.close-btn {
-  background: rgba(255,255,255,0.08);
-  border: none;
-  color: #9ca3af;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
+.tt-modal-close {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
 }
 
-.form-group {
+.tt-modal-close:hover {
+  background: var(--absent-bg);
+  border-color: var(--border-absent);
+  color: var(--absent-color);
+}
+
+.tt-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tt-form-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.form-group label {
+.tt-form-group label {
   font-size: 12px;
   font-weight: 700;
-  color: #9ca3af;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
 }
 
-.form-row-2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.modal-select {
+.tt-input-select, .tt-input-text {
   width: 100%;
-  background: #1f2937;
-  border: 1px solid rgba(255,255,255,0.12);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
-  padding: 12px 14px;
-  color: white;
+  padding: 12px 16px;
+  color: var(--text-primary);
   font-size: 14px;
+  font-family: inherit;
   outline: none;
+  transition: all 0.2s ease;
 }
 
-.modal-actions {
+.tt-input-select:focus, .tt-input-text:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px var(--accent-blue-glow);
+}
+
+.tt-modal-actions {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
   gap: 10px;
-  margin-top: 4px;
 }
 
-.btn-cancel {
-  flex: 1;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
-  color: #9ca3af;
-  padding: 12px;
+.tt-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-tt-clear {
+  background: var(--absent-bg);
+  border: 1px solid var(--border-absent);
+  color: var(--absent-color);
+  padding: 10px 16px;
   border-radius: 12px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.btn-submit {
-  flex: 2;
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
+.btn-tt-clear:hover {
+  background: var(--absent-color);
+  color: white;
+}
+
+.btn-tt-cancel {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  padding: 10px 18px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-tt-cancel:hover {
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+.btn-tt-confirm {
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
   border: none;
   color: white;
-  padding: 12px;
+  padding: 10px 22px;
   border-radius: 12px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-blue);
 }
 
-.btn-submit:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.btn-tt-confirm:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
 }

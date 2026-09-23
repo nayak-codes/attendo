@@ -10,7 +10,7 @@ const DEPARTMENTS = ['CSE', 'CSD', 'CSM', 'ECE', 'EEE', 'MECH', 'CIVIL', 'IT'];
 const YEARS = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
 const SECTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-const SectionManager = ({ adminCollegeCode, onSectionsChange, onNavigateTab }) => {
+const SectionManager = ({ adminCollegeCode, students = [], onSectionsChange, onNavigateTab }) => {
   const [sections, setSections] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
@@ -19,6 +19,30 @@ const SectionManager = ({ adminCollegeCode, onSectionsChange, onNavigateTab }) =
   const [toastMsg, setToastMsg] = useState('');
   const [filterDept, setFilterDept] = useState('ALL');
   const [filterYear, setFilterYear] = useState('ALL');
+
+  const getSectionStudentCount = (sec) => {
+    if (!students || students.length === 0) return sec.studentCount || 0;
+    const disp = (sec.displayName || '').toUpperCase().trim();
+    const letter = (sec.sectionLetter || '').toUpperCase().trim();
+    const deptLetter = `${(sec.department || '').toUpperCase().trim()}-${letter}`;
+    const secYear = (sec.year || '').toUpperCase().trim();
+
+    const count = students.filter(st => {
+      if (!st.section) return false;
+      const stSec = String(st.section).toUpperCase().trim().replace(/^SECTION\s+/i, '');
+      const matchSec = stSec === disp || stSec === letter || stSec === deptLetter || disp.endsWith(`-${stSec}`);
+      if (!matchSec) return false;
+
+      // Match year if present on student record
+      if (st.year) {
+        const stYear = String(st.year).toUpperCase().trim();
+        return stYear === secYear || stYear.replace(/\s/g, '') === secYear.replace(/\s/g, '');
+      }
+      return true;
+    }).length;
+
+    return count;
+  };
 
   const [newSection, setNewSection] = useState({
     department: 'CSE',
@@ -154,8 +178,10 @@ const SectionManager = ({ adminCollegeCode, onSectionsChange, onNavigateTab }) =
           <span className="sec-stat-lbl">Departments</span>
         </div>
         <div className="sec-stat-pill">
-          <span className="sec-stat-num">{sections.reduce((a, s) => a + (s.studentCount || 0), 0)}</span>
-          <span className="sec-stat-lbl">Total Students</span>
+          <span className="sec-stat-num">
+            {students.length > 0 ? students.length : sections.reduce((a, s) => a + getSectionStudentCount(s), 0)}
+          </span>
+          <span className="sec-stat-lbl">Total Enrolled Students</span>
         </div>
       </div>
 
@@ -202,61 +228,65 @@ const SectionManager = ({ adminCollegeCode, onSectionsChange, onNavigateTab }) =
               </div>
 
               <div className="sections-row">
-                {deptSections.map(sec => (
-                  <motion.div
-                    key={sec.id}
-                    className="section-card"
-                    style={{ '--dept-color': deptColors[sec.department] || '#3b82f6' }}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.25 }}
-                  >
-                    <div className="section-card-top">
-                      <div className="section-name-badge">
-                        {sec.displayName}
+                {deptSections.map(sec => {
+                  const studentCount = getSectionStudentCount(sec);
+                  return (
+                    <motion.div
+                      key={sec.id}
+                      className="section-card"
+                      style={{ '--dept-color': deptColors[sec.department] || '#3b82f6', cursor: 'pointer' }}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.25 }}
+                      onClick={() => setSelectedAnalyticsSection(sec)}
+                    >
+                      <div className="section-card-top">
+                        <div className="section-name-badge">
+                          {sec.displayName}
+                        </div>
+                        <button
+                          className="sec-delete-btn"
+                          onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(sec); }}
+                          title="Delete section"
+                        >✕</button>
                       </div>
-                      <button
-                        className="sec-delete-btn"
-                        onClick={() => setShowDeleteConfirm(sec)}
-                        title="Delete section"
-                      >✕</button>
-                    </div>
 
-                    <div className="section-year-tag">{sec.year}</div>
+                      <div className="section-year-tag">{sec.year}</div>
 
-                    <div className="section-card-footer">
-                      <span className="section-student-count">
-                        👥 {sec.studentCount || 0} students
-                      </span>
-                      <span className="section-dept-tag">{sec.department}</span>
-                    </div>
+                      <div className="section-card-footer">
+                        <span className="section-student-count">
+                          👥 {studentCount} student{studentCount !== 1 ? 's' : ''}
+                        </span>
+                        <span className="section-dept-tag">{sec.department}</span>
+                      </div>
 
-                    {/* QUICK CONTROL & ANALYSIS BUTTONS */}
-                    <div className="sec-action-btns">
-                      <button
-                        className="btn-sec-action btn-sec-analysis"
-                        onClick={() => setSelectedAnalyticsSection(sec)}
-                        title="View Section Analysis & Low Attendance Alert"
-                      >
-                        📊 Analysis (&lt;50%)
-                      </button>
-                      <button
-                        className="btn-sec-action btn-sec-tt"
-                        onClick={() => onNavigateTab && onNavigateTab('timetable', sec.displayName)}
-                        title="Setup Timetable for this section"
-                      >
-                        📅 Timetable
-                      </button>
-                      <button
-                        className="btn-sec-action btn-sec-fac"
-                        onClick={() => onNavigateTab && onNavigateTab('teachers', sec.displayName)}
-                        title="Add/Assign Faculty to this section"
-                      >
-                        👨‍🏫 Faculty
-                      </button>
-                    </div>
-                  </motion.div>
-                ))}
+                      {/* QUICK CONTROL & ANALYSIS BUTTONS */}
+                      <div className="sec-action-btns">
+                        <button
+                          className="btn-sec-action btn-sec-analysis"
+                          onClick={(e) => { e.stopPropagation(); setSelectedAnalyticsSection(sec); }}
+                          title="View Section Analysis & Low Attendance Alert"
+                        >
+                          📊 Analysis (&lt;50%)
+                        </button>
+                        <button
+                          className="btn-sec-action btn-sec-tt"
+                          onClick={(e) => { e.stopPropagation(); onNavigateTab && onNavigateTab('timetable', sec); }}
+                          title="Setup Timetable for this section"
+                        >
+                          📅 Timetable
+                        </button>
+                        <button
+                          className="btn-sec-action btn-sec-fac"
+                          onClick={(e) => { e.stopPropagation(); onNavigateTab && onNavigateTab('teachers', sec); }}
+                          title="Add/Assign Faculty to this section"
+                        >
+                          👨‍🏫 Faculty
+                        </button>
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </div>
             </div>
           ))}

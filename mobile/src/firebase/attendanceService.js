@@ -124,6 +124,46 @@ export async function markNotificationRead(notifId) {
 }
 
 /**
+ * Real-time listener: college config (by collegeCode).
+ */
+export function subscribeCollegeConfig(collegeCode, callback) {
+  const ref = doc(db, 'collegeConfig', collegeCode || 'VJIT');
+  return onSnapshot(ref, snap => {
+    if (snap.exists()) {
+      callback(snap.data());
+    } else {
+      callback({
+        startTime: '09:00',
+        periodsPerDay: 7,
+        periodDuration: 50,
+        hasLunchBreak: true,
+        lunchAfterPeriod: 4,
+        lunchDuration: 45,
+      });
+    }
+  }, err => {
+    console.warn('subscribeCollegeConfig error:', err.message);
+  });
+}
+
+/**
+ * Real-time listener: section timetables for college (by collegeCode).
+ */
+export function subscribeCollegeTimetables(collegeCode, callback) {
+  const q = query(
+    collection(db, 'timetables'),
+    where('collegeCode', '==', collegeCode || 'VJIT')
+  );
+  return onSnapshot(q, snapshot => {
+    const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    callback(list);
+  }, err => {
+    console.warn('subscribeCollegeTimetables error:', err.message);
+    callback([]);
+  });
+}
+
+/**
  * Real-time listener: sessions for teacher (by date + section).
  * No orderBy → no composite index required. Sorted client-side.
  */
@@ -145,6 +185,74 @@ export function subscribeTeacherSessions(date, section, callback) {
     callback(sessions);
   }, err => {
     console.warn('subscribeTeacherSessions error:', err.message);
+    callback([]);
+  });
+}
+
+/**
+ * Real-time listener: all students in a given section (by collegeCode + section).
+ * Reads from the 'users' collection where role=='student'.
+ */
+export function subscribeStudentsBySection(collegeCode, section, callback) {
+  if (!collegeCode || !section) { callback([]); return () => {}; }
+  const q = query(
+    collection(db, 'users'),
+    where('role', '==', 'student'),
+    where('selectedCollegeCode', '==', collegeCode),
+    where('section', '==', section)
+  );
+  return onSnapshot(q, snapshot => {
+    const students = snapshot.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (a.rollNo || '').localeCompare(b.rollNo || ''));
+    callback(students);
+  }, err => {
+    console.warn('subscribeStudentsBySection error:', err.message);
+    callback([]);
+  });
+}
+
+/**
+ * Real-time listener: ALL sessions submitted by a teacher (by teacherId).
+ * Used for live teacher-side analysis stats.
+ */
+export function subscribeTeacherAllSessions(teacherId, callback) {
+  if (!teacherId) { callback([]); return () => {}; }
+  const q = query(
+    collection(db, 'sessions'),
+    where('teacherId', '==', teacherId)
+  );
+  return onSnapshot(q, snapshot => {
+    const list = snapshot.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => {
+        const ta = a.submittedAt?.toMillis?.() || 0;
+        const tb = b.submittedAt?.toMillis?.() || 0;
+        return tb - ta;
+      });
+    callback(list);
+  }, err => {
+    console.warn('subscribeTeacherAllSessions error:', err.message);
+    callback([]);
+  });
+}
+
+/**
+ * Real-time listener: attendance records for a specific subject+section combo.
+ * Returns raw records; caller builds the per-student map.
+ */
+export function subscribeSubjectSectionAttendance(subject, section, callback) {
+  if (!subject || !section) { callback([]); return () => {}; }
+  const q = query(
+    collection(db, 'attendance'),
+    where('subject', '==', subject),
+    where('section', '==', section)
+  );
+  return onSnapshot(q, snapshot => {
+    const records = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    callback(records);
+  }, err => {
+    console.warn('subscribeSubjectSectionAttendance error:', err.message);
     callback([]);
   });
 }

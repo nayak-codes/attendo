@@ -50,6 +50,7 @@ const CollegeAdminDashboard = () => {
   const [sections, setSections] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [sectionFilter, setSectionFilter] = useState('ALL');
+  const [selectedSectionForTT, setSelectedSectionForTT] = useState('');
   const [toastMsg, setToastMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -65,6 +66,22 @@ const CollegeAdminDashboard = () => {
   });
   const [tSections, setTSections] = useState(['A']);
   const [tSubjects, setTSubjects] = useState(['Operating Systems']);
+  const [customAddTeacherSubj, setCustomAddTeacherSubj] = useState('');
+
+  const handleToggleAddTeacherSubject = (subj) => {
+    setTSubjects(prev =>
+      prev.includes(subj) ? prev.filter(s => s !== subj) : [...prev, subj]
+    );
+  };
+
+  const handleAddCustomAddTeacherSubject = () => {
+    if (!customAddTeacherSubj.trim()) return;
+    const clean = customAddTeacherSubj.trim();
+    if (!tSubjects.includes(clean)) {
+      setTSubjects(prev => [...prev, clean]);
+    }
+    setCustomAddTeacherSubj('');
+  };
 
   // Form: Add Student
   const [newStudent, setNewStudent] = useState({
@@ -110,26 +127,33 @@ const CollegeAdminDashboard = () => {
       alert('Please fill out Teacher Name and College ID');
       return;
     }
+    if (tSubjects.length === 0) {
+      alert('Please select or add at least 1 subject for the faculty');
+      return;
+    }
     setIsSubmitting(true);
     const teacherId = `T_${Date.now().toString().slice(-6)}`;
+    const finalSubjects = Array.from(new Set(tSubjects.filter(Boolean)));
     const payload = {
       collegeId: newTeacher.collegeId.trim(),
       password: newTeacher.password.trim() || 'teacher123',
       name: newTeacher.name.trim(),
       role: 'teacher',
       department: newTeacher.department || 'CSE',
-      subject: newTeacher.subject.trim(),
+      subject: finalSubjects[0] || 'Operating Systems',
       collegeCode: adminCollegeCode,
-      assignedSections: tSections,
-      assignedSubjects: Array.from(new Set([newTeacher.subject.trim(), ...tSubjects])),
+      assignedSections: tSections.length ? tSections : ['A'],
+      assignedSubjects: finalSubjects,
       createdAt: new Date().toISOString(),
     };
     try {
       await setDoc(doc(db, 'users', teacherId), payload);
-      triggerToast(`🎉 Faculty "${payload.name}" registered & synced with Mobile App!`);
+      triggerToast(`🎉 Faculty "${payload.name}" registered with ${finalSubjects.length} subject(s) & synced with Mobile App!`);
       setShowAddTeacherModal(false);
       setNewTeacher({ name: '', collegeId: '', department: 'CSE', subject: 'Operating Systems', password: 'teacher123' });
       setTSections(['A']);
+      setTSubjects(['Operating Systems']);
+      setCustomAddTeacherSubj('');
     } catch (err) {
       alert('Failed to add teacher: ' + err.message);
     }
@@ -387,10 +411,14 @@ const CollegeAdminDashboard = () => {
         {activeTab === 'sections' && (
           <SectionManager
             adminCollegeCode={adminCollegeCode}
+            students={students}
             onSectionsChange={setSections}
             onNavigateTab={(tabId, targetSection) => {
               setActiveTab(tabId);
-              if (targetSection) setSectionFilter(targetSection);
+              if (targetSection) {
+                setSectionFilter(targetSection);
+                setSelectedSectionForTT(targetSection);
+              }
             }}
           />
         )}
@@ -401,6 +429,7 @@ const CollegeAdminDashboard = () => {
             adminCollegeCode={adminCollegeCode}
             sections={sections}
             teachers={teachers}
+            initialSection={selectedSectionForTT}
           />
         )}
 
@@ -493,7 +522,7 @@ const CollegeAdminDashboard = () => {
         <AnimatePresence>
           {showAddTeacherModal && (
             <div className="modal-overlay">
-              <motion.div className="modal-content" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}>
+              <motion.div className="modal-content wide-modal" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}>
                 <div className="modal-header">
                   <h2>👨‍🏫 Register New Faculty</h2>
                   <button className="close-btn" onClick={() => setShowAddTeacherModal(false)}>✕</button>
@@ -516,11 +545,52 @@ const CollegeAdminDashboard = () => {
                         onChange={e => setNewTeacher({ ...newTeacher, department: e.target.value })} />
                     </div>
                   </div>
-                  <div className="form-group">
-                    <label>Primary Subject</label>
-                    <input type="text" placeholder="e.g. Operating Systems" value={newTeacher.subject}
-                      onChange={e => setNewTeacher({ ...newTeacher, subject: e.target.value })} required />
+
+                  {/* Multi-Subject Selection Boxes */}
+                  <div className="alloc-section">
+                    <label className="section-label">📚 Assign Subjects (Select 2 or 3 subjects):</label>
+                    <div className="chips-wrapper">
+                      {DEFAULT_SUBJECTS.map(subj => (
+                        <button key={subj} type="button"
+                          className={`chip-toggle ${tSubjects.includes(subj) ? 'subj-selected' : ''}`}
+                          onClick={() => handleToggleAddTeacherSubject(subj)}>
+                          {tSubjects.includes(subj) ? '✓ ' : '+ '}{subj}
+                        </button>
+                      ))}
+                    </div>
                   </div>
+
+                  <div className="alloc-section">
+                    <label className="section-label">Add Custom Subject:</label>
+                    <div className="custom-input-row">
+                      <input type="text" className="modal-text-input" placeholder="e.g. Artificial Intelligence"
+                        value={customAddTeacherSubj} onChange={e => setCustomAddTeacherSubj(e.target.value)} />
+                      <button type="button" className="btn-add-custom" onClick={handleAddCustomAddTeacherSubject}>Add</button>
+                    </div>
+                  </div>
+
+                  {/* Assign Sections */}
+                  <div className="alloc-section">
+                    <label className="section-label">🏢 Assign Sections:</label>
+                    <div className="chips-wrapper">
+                      {[...allSectionOptions, ...tSections.filter(s => !allSectionOptions.includes(s))].map(sec => (
+                        <button key={sec} type="button"
+                          className={`chip-toggle ${tSections.includes(sec) ? 'sec-selected' : ''}`}
+                          onClick={() => {
+                            setTSections(prev => prev.includes(sec) ? prev.filter(s => s !== sec) : [...prev, sec]);
+                          }}>
+                          {tSections.includes(sec) ? '✓ ' : ''}{sec}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="summary-box" style={{ marginTop: 10, marginBottom: 12 }}>
+                    <span className="summary-lbl">FACULTY ASSIGNMENT SUMMARY:</span>
+                    <div><strong className="txt-blue">Sections ({tSections.length}):</strong> {tSections.join(', ') || 'None selected'}</div>
+                    <div><strong className="txt-purple">Subjects ({tSubjects.length}):</strong> {tSubjects.join(', ') || 'None selected'}</div>
+                  </div>
+
                   <div className="form-group">
                     <label>Password</label>
                     <input type="text" placeholder="Default: teacher123" value={newTeacher.password}
@@ -529,7 +599,7 @@ const CollegeAdminDashboard = () => {
                   <div className="modal-actions">
                     <button type="button" className="btn-cancel" onClick={() => setShowAddTeacherModal(false)}>Cancel</button>
                     <button type="submit" className="btn-submit" disabled={isSubmitting}>
-                      {isSubmitting ? 'Registering...' : 'Register & Sync Mobile'}
+                      {isSubmitting ? 'Registering...' : `Register & Sync (${tSubjects.length} Subject${tSubjects.length === 1 ? '' : 's'})`}
                     </button>
                   </div>
                 </form>

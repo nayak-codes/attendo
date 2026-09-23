@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  Modal, ScrollView, TextInput, ActivityIndicator, Alert,
+  Modal, ScrollView, TextInput, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -99,12 +99,14 @@ export default function HeaderBar({
       {/* ── TOP HEADER ── */}
       <View style={[styles.header, { backgroundColor: colors.bgSecondary, borderBottomColor: colors.borderSubtle }]}>
         <View style={styles.brandRow}>
-          <View style={[styles.logoBox, { backgroundColor: colors.accentBlue }]}>
-            <Text style={styles.logoIcon}>🎓</Text>
-          </View>
+          <Image
+            source={require('../../assets/app logo.png')}
+            style={styles.logoBoxImage}
+            resizeMode="contain"
+          />
           <View>
             <Text style={[styles.brandTitle, { color: colors.textPrimary }]}>
-              Edu<Text style={{ color: colors.accentBlue }}>Track</Text>
+              Knap<Text style={{ color: colors.accentBlue }}>sack</Text>
             </Text>
             {subtitle ? <Text style={[styles.brandSubtitle, { color: colors.textSecondary }]}>{subtitle}</Text> : null}
           </View>
@@ -263,14 +265,16 @@ export default function HeaderBar({
 
               {/* Logo + Title */}
               <View style={{ alignItems: 'center', marginBottom: 20 }}>
-                <View style={[styles.loginLogoBox, { backgroundColor: colors.accentBlue }]}>
-                  <Text style={{ fontSize: 28 }}>🎓</Text>
-                </View>
+                <Image
+                  source={require('../../assets/app logo.png')}
+                  style={{ width: 56, height: 56, borderRadius: 14, marginBottom: 4 }}
+                  resizeMode="contain"
+                />
                 <Text style={[styles.sheetTitle, { color: colors.textPrimary, textAlign: 'center', marginTop: 10 }]}>
                   Log into Another Account
                 </Text>
                 <Text style={[styles.sheetSub, { color: colors.textMuted, textAlign: 'center' }]}>
-                  Use your friend's EduTrack credentials to link their profile
+                  Use your friend's Knapsack credentials to link their profile
                 </Text>
               </View>
 
@@ -389,8 +393,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  logoBox: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  logoIcon: { fontSize: 20 },
+  logoBoxImage: { width: 38, height: 38, borderRadius: 10 },
   brandTitle: { fontSize: 20, fontWeight: '800' },
   brandSubtitle: { fontSize: 11 },
   userRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

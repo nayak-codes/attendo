@@ -12,15 +12,55 @@ export const AttendanceProvider = ({ children }) => {
   const [sessions, setSessions] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
-  // Student: live Firestore data
+  // Student & Teacher live timetable & config data
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [timetables, setTimetables] = useState([]);
+  const [collegeConfig, setCollegeConfig] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const unsubAttRef = useRef(null);
   const unsubNotifRef = useRef(null);
+  const unsubTTRef = useRef(null);
+  const unsubConfigRef = useRef(null);
 
-  // Subscribe to live data when student logs in
+  const collegeCode = user?.selectedCollegeCode || user?.collegeCode || 'VJIT';
+
+  // Live subscription to collegeConfig & timetables for all logged in users
+  useEffect(() => {
+    if (!collegeCode) return;
+
+    // College Config Listener
+    const configRef = doc(db, 'collegeConfig', collegeCode);
+    unsubConfigRef.current = onSnapshot(configRef, snap => {
+      if (snap.exists()) {
+        setCollegeConfig(snap.data());
+      } else {
+        setCollegeConfig({
+          startTime: '09:00',
+          periodsPerDay: 7,
+          periodDuration: 50,
+          hasLunchBreak: true,
+          lunchAfterPeriod: 4,
+          lunchDuration: 45,
+        });
+      }
+    }, err => console.warn('Config subscription error:', err.message));
+
+    // Timetables Listener (all section timetables for college)
+    const ttQuery = query(collection(db, 'timetables'), where('collegeCode', '==', collegeCode));
+    unsubTTRef.current = onSnapshot(ttQuery, snap => {
+      const ttList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setTimetables(ttList);
+    }, err => console.warn('Timetables subscription error:', err.message));
+
+    return () => {
+      if (unsubConfigRef.current) { unsubConfigRef.current(); unsubConfigRef.current = null; }
+      if (unsubTTRef.current) { unsubTTRef.current(); unsubTTRef.current = null; }
+    };
+  }, [collegeCode]);
+
+  // Subscribe to live student data when student logs in
   useEffect(() => {
     if (user?.role === 'student' && (user?.rollNo || user?.collegeId)) {
       const rollNo = user.rollNo || user.collegeId;
@@ -171,6 +211,8 @@ export const AttendanceProvider = ({ children }) => {
       loading,
       attendanceRecords,
       notifications,
+      timetables,
+      collegeConfig,
       getStudentAttendance,
       markNotificationRead,
     }}>

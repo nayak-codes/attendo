@@ -8,7 +8,8 @@ import {
   ScrollView,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  Image
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -99,7 +100,7 @@ export default function LoginScreen({ onNavigate }) {
       {/* Top Header Bar */}
       <View style={styles.topHeader}>
         <View style={styles.versionBadge}>
-          <Text style={[styles.versionText, { color: colors.accentBlue }]}>⚡ EduTrack 2.0</Text>
+          <Text style={[styles.versionText, { color: colors.accentBlue }]}>⚡ Knapsack 2.0</Text>
         </View>
         <TouchableOpacity
           style={[styles.themeToggleBtn, { backgroundColor: colors.bgCard, borderColor: colors.borderSubtle }]}
@@ -119,11 +120,13 @@ export default function LoginScreen({ onNavigate }) {
       >
         {/* Main Logo & Title */}
         <View style={styles.brandBox}>
-          <View style={[styles.logoCircle, { backgroundColor: colors.accentBlue }]}>
-            <Text style={styles.logoEmoji}>🎓</Text>
-          </View>
+          <Image
+            source={require('../../assets/app logo.png')}
+            style={{ width: 64, height: 64, borderRadius: 16, marginBottom: 12 }}
+            resizeMode="contain"
+          />
           <Text style={[styles.title, { color: colors.textPrimary }]}>
-            Edu<Text style={{ color: colors.accentBlue }}>Track</Text>
+            Knap<Text style={{ color: colors.accentBlue }}>sack</Text>
           </Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             Multi-College Smart Attendance Network
@@ -361,7 +364,7 @@ export default function LoginScreen({ onNavigate }) {
             <TouchableOpacity><Text style={[styles.footerLinkText, { color: colors.textMuted }]}>Contact Us</Text></TouchableOpacity>
           </View>
           <Text style={[styles.copyrightText, { color: colors.textMuted }]}>
-            © 2026 EduTrack Network. All rights reserved.
+            © 2026 Knapsack Network. All rights reserved.
           </Text>
         </View>
       </ScrollView>
