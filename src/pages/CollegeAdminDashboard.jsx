@@ -37,6 +37,7 @@ function isUserBelongingToCollege(userDoc, targetCollegeCode) {
 const TABS = [
   { id: 'sections', label: '🏢 Sections', shortLabel: 'Sections' },
   { id: 'timetable', label: '📅 Timetable', shortLabel: 'Timetable' },
+  { id: 'coordinators', label: '👔 Coordinators', shortLabel: 'Coordinators' },
   { id: 'teachers', label: '👨‍🏫 Faculty', shortLabel: 'Faculty' },
   { id: 'students', label: '👨‍🎓 Students', shortLabel: 'Students' },
   { id: 'attendance', label: '📊 Attendance', shortLabel: 'Attendance' },
@@ -47,6 +48,7 @@ const CollegeAdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('sections');
   const [teachers, setTeachers] = useState([]);
   const [students, setStudents] = useState([]);
+  const [coordinators, setCoordinators] = useState([]);
   const [sections, setSections] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [sectionFilter, setSectionFilter] = useState('ALL');
@@ -57,8 +59,14 @@ const CollegeAdminDashboard = () => {
   // Modals
   const [showAddTeacherModal, setShowAddTeacherModal] = useState(false);
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
+  const [showAddCoordModal, setShowAddCoordModal] = useState(false);
   const [assignModalTeacher, setAssignModalTeacher] = useState(null);
   const [editStudentModal, setEditStudentModal] = useState(null);
+
+  // Form: Add Coordinator
+  const [newCoord, setNewCoord] = useState({
+    name: '', collegeId: '', department: 'CSE', password: 'admin123'
+  });
 
   // Form: Add Teacher
   const [newTeacher, setNewTeacher] = useState({
@@ -109,8 +117,43 @@ const CollegeAdminDashboard = () => {
       setStudents(list.filter(s => isUserBelongingToCollege(s, adminCollegeCode)));
     }, err => console.warn('Students listener:', err.message));
 
-    return () => { unsubTeachers(); unsubStudents(); };
+    const qCoords = query(collection(db, 'users'), where('role', '==', 'coordinator'));
+    const unsubCoords = onSnapshot(qCoords, (snapshot) => {
+      const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setCoordinators(list.filter(c => isUserBelongingToCollege(c, adminCollegeCode)));
+    }, err => console.warn('Coordinators listener:', err.message));
+
+    return () => { unsubTeachers(); unsubStudents(); unsubCoords(); };
   }, [adminCollegeCode]);
+
+  // Add Coordinator submit
+  const handleAddCoordinatorSubmit = async (e) => {
+    e.preventDefault();
+    if (!newCoord.name.trim() || !newCoord.collegeId.trim()) {
+      alert('Please fill out Coordinator Name and User ID');
+      return;
+    }
+    setIsSubmitting(true);
+    const coordId = `C_${Date.now().toString().slice(-6)}`;
+    const payload = {
+      collegeId: newCoord.collegeId.trim().toUpperCase(),
+      password: newCoord.password.trim() || 'admin123',
+      name: newCoord.name.trim(),
+      role: 'coordinator',
+      department: newCoord.department || 'CSE',
+      collegeCode: adminCollegeCode,
+      createdAt: new Date().toISOString(),
+    };
+    try {
+      await setDoc(doc(db, 'users', coordId), payload);
+      triggerToast(`👔 Dept. Coordinator "${payload.name}" assigned to ${payload.department}!`);
+      setShowAddCoordModal(false);
+      setNewCoord({ name: '', collegeId: '', department: 'CSE', password: 'admin123' });
+    } catch (err) {
+      alert('Failed to add coordinator: ' + err.message);
+    }
+    setIsSubmitting(false);
+  };
 
   const triggerToast = (msg) => {
     setToastMsg(msg);
@@ -309,6 +352,11 @@ const CollegeAdminDashboard = () => {
             </p>
           </div>
           <div className="admin-header-actions">
+            {activeTab === 'coordinators' && (
+              <button className="btn-primary-add" onClick={() => setShowAddCoordModal(true)}>
+                👔 Assign Coordinator
+              </button>
+            )}
             {activeTab === 'teachers' && (
               <button className="btn-primary-add teacher-btn" onClick={() => setShowAddTeacherModal(true)}>
                 ➕ Register Faculty
@@ -431,6 +479,66 @@ const CollegeAdminDashboard = () => {
             teachers={teachers}
             initialSection={selectedSectionForTT}
           />
+        )}
+
+        {/* TAB: COORDINATORS (HODs) */}
+        {activeTab === 'coordinators' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div>
+                <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>Department Coordinators (HODs)</h3>
+                <p style={{ fontSize: 13, color: 'var(--text-sub)', margin: '4px 0 0 0' }}>
+                  Assign branch coordinators to manage CSE, ECE, Civil, IT, AI & ML departments independently.
+                </p>
+              </div>
+              <button className="btn-primary-add" onClick={() => setShowAddCoordModal(true)}>
+                ➕ Assign Coordinator
+              </button>
+            </div>
+
+            {coordinators.length === 0 ? (
+              <div className="empty-state">No department coordinators assigned yet. Click "Assign Coordinator" to add branch HODs.</div>
+            ) : (
+              <div className="roster-grid">
+                {coordinators.map(c => (
+                  <div key={c.id} className="faculty-card" style={{ borderLeft: '4px solid #3b82f6' }}>
+                    <div className="faculty-card-top">
+                      <div className="faculty-avatar" style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)' }}>
+                        👔
+                      </div>
+                      <div className="faculty-info">
+                        <h3 className="faculty-name">{c.name}</h3>
+                        <p className="faculty-sub">
+                          ID: <span className="highlight-txt">{c.collegeId || c.id}</span>
+                        </p>
+                      </div>
+                      <button
+                        className="btn-delete-icon"
+                        onClick={() => handleDeleteUser(c.id, c.name, 'coordinator')}
+                        title="Remove Coordinator"
+                        style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', padding: '8px', borderRadius: '10px', cursor: 'pointer' }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                    <div className="faculty-allocations" style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: '12px', marginTop: '12px' }}>
+                      <div className="alloc-group">
+                        <span className="alloc-title" style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-sub)' }}>Assigned Department:</span>
+                        <div className="tag-flex" style={{ marginTop: '6px' }}>
+                          <span className="tag-badge tag-sec" style={{ fontSize: '13px', padding: '6px 14px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', borderRadius: '8px', fontWeight: 'bold' }}>
+                            🏢 {c.department || 'CSE'} Department
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--text-sub)' }}>
+                        🔑 Portal Login ID: <strong style={{ color: 'var(--text-main)' }}>{c.collegeId}</strong>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         {/* TAB: FACULTY ROSTER */}
@@ -784,6 +892,92 @@ const CollegeAdminDashboard = () => {
                     </button>
                   </div>
                 </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* ADD COORDINATOR MODAL */}
+        <AnimatePresence>
+          {showAddCoordModal && (
+            <div className="modal-overlay" onClick={() => setShowAddCoordModal(false)}>
+              <motion.div
+                className="modal-content"
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="modal-header">
+                  <h2>👔 Assign Department Coordinator (HOD)</h2>
+                  <button className="close-btn" onClick={() => setShowAddCoordModal(false)}>✕</button>
+                </div>
+                <form onSubmit={handleAddCoordinatorSubmit} className="modal-form">
+                  <div className="form-group">
+                    <label>Coordinator Full Name</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Dr. K. Venkatesh (HOD)"
+                      value={newCoord.name}
+                      onChange={e => setNewCoord({ ...newCoord, name: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>User ID / Login Code</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. CSE-COORD"
+                      value={newCoord.collegeId}
+                      onChange={e => setNewCoord({ ...newCoord, collegeId: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Assigned Department Branch</label>
+                    <select
+                      className="modal-select"
+                      value={newCoord.department}
+                      onChange={e => {
+                        const d = e.target.value;
+                        setNewCoord({
+                          ...newCoord,
+                          department: d,
+                          collegeId: `${d}-COORD`
+                        });
+                      }}
+                    >
+                      <option value="CSE">CSE - Computer Science & Engineering</option>
+                      <option value="ECE">ECE - Electronics & Communication</option>
+                      <option value="CIVIL">CIVIL - Civil Engineering</option>
+                      <option value="EEE">EEE - Electrical & Electronics</option>
+                      <option value="MECH">MECH - Mechanical Engineering</option>
+                      <option value="IT">IT - Information Technology</option>
+                      <option value="AIML">AIML - AI & Machine Learning</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Portal Password</label>
+                    <input
+                      type="text"
+                      required
+                      value={newCoord.password}
+                      onChange={e => setNewCoord({ ...newCoord, password: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="modal-actions">
+                    <button type="button" className="btn-cancel" onClick={() => setShowAddCoordModal(false)}>
+                      Cancel
+                    </button>
+                    <button type="submit" className="btn-save" disabled={isSubmitting}>
+                      {isSubmitting ? 'Assigning...' : 'Assign Coordinator'}
+                    </button>
+                  </div>
+                </form>
               </motion.div>
             </div>
           )}

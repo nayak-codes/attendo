@@ -26,13 +26,21 @@ export default function AttendanceScreen({ sessionInfo, onNavigate }) {
       setStudents(classStudents);
       setAttendance(prev => {
         const init = { ...prev };
+        if (sessionInfo.existingAttendance && Object.keys(sessionInfo.existingAttendance).length > 0) {
+          Object.assign(init, sessionInfo.existingAttendance);
+        } else if (sessionInfo.attendanceList && Array.isArray(sessionInfo.attendanceList)) {
+          sessionInfo.attendanceList.forEach(rec => {
+            const id = rec.studentId || rec.id;
+            if (id) init[id] = rec.status;
+          });
+        }
         classStudents.forEach(s => { if (!init[s.id]) init[s.id] = 'present'; });
         return init;
       });
       setLoading(false);
     });
     return () => unsub();
-  }, [sessionInfo.section]);
+  }, [sessionInfo.section, sessionInfo.existingAttendance, sessionInfo.attendanceList]);
 
   const toggleStudent = id => setAttendance(prev => ({
     ...prev,
@@ -132,7 +140,7 @@ export default function AttendanceScreen({ sessionInfo, onNavigate }) {
   return (
     <View style={styles.container}>
       <HeaderBar
-        subtitle="Mark Attendance"
+        subtitle={sessionInfo.isEdit ? "Edit Attendance" : "Mark Attendance"}
         onLogout={() => { logout(); onNavigate('Login'); }}
       />
 
@@ -144,10 +152,10 @@ export default function AttendanceScreen({ sessionInfo, onNavigate }) {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.sessionSubject} numberOfLines={1}>
-            📚 {sessionInfo.subject || 'Data Structures'}
+            {sessionInfo.isEdit ? '✏️' : '📚'} {sessionInfo.subject || 'Data Structures'}
           </Text>
           <Text style={styles.sessionMeta}>
-            Sec {sessionInfo.section || 'A'} • {sessionInfo.session || 'Session 1'} • {sessionInfo.date}
+            Sec {sessionInfo.section || 'A'} • {sessionInfo.session || 'Session 1'} • {sessionInfo.date}{sessionInfo.isEdit ? ' • ✏️ EDIT MODE' : ''}
           </Text>
         </View>
       </View>
@@ -236,7 +244,7 @@ export default function AttendanceScreen({ sessionInfo, onNavigate }) {
           </View>
         </View>
         <TouchableOpacity style={styles.previewBtn} onPress={handlePreview} activeOpacity={0.8}>
-          <Text style={styles.previewBtnText}>👁️ Preview & Submit</Text>
+          <Text style={styles.previewBtnText}>{sessionInfo.isEdit ? '👁️ Preview & Update' : '👁️ Preview & Submit'}</Text>
         </TouchableOpacity>
       </View>
     </View>

@@ -349,32 +349,43 @@ export default function StudentDashboardScreen({ onNavigate }) {
 
   const monthAbsentClasses = monthRecords.filter(r => r.status === 'absent');
 
-  // State for Time Horizon Filter: 'monthly' | 'last_week' | 'yesterday'
-  const [studentAnalysisFilter, setStudentAnalysisFilter] = useState('monthly');
+  // State for Time Horizon Filter: 'today' | 'yesterday' | 'custom' | 'overall'
+  const [studentAnalysisFilter, setStudentAnalysisFilter] = useState('today');
+  const [customAnalysisDate, setCustomAnalysisDate] = useState(new Date().toISOString().split('T')[0]);
+  const [showCustomDateModal, setShowCustomDateModal] = useState(false);
+
+  // Extract all unique dates available in attendance records for custom date selection
+  const availableAnalysisDates = React.useMemo(() => {
+    if (!attendanceRecords || attendanceRecords.length === 0) return [];
+    const set = new Set(attendanceRecords.map(r => r.date).filter(Boolean));
+    return Array.from(set).sort().reverse();
+  }, [attendanceRecords]);
 
   // Derive dynamic time-filtered attendance records for student analysis
   const filteredAnalysisRecords = React.useMemo(() => {
     if (!attendanceRecords || attendanceRecords.length === 0) return [];
 
+    const todayStr = new Date().toISOString().split('T')[0];
+
     const yest = new Date();
     yest.setDate(yest.getDate() - 1);
     const yesterdayStr = yest.toISOString().split('T')[0];
 
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    const weekAgoStr = weekAgo.toISOString().split('T')[0];
-
     return attendanceRecords.filter(rec => {
       if (!rec.date) return false;
+      if (studentAnalysisFilter === 'today') {
+        return rec.date === todayStr;
+      }
       if (studentAnalysisFilter === 'yesterday') {
         return rec.date === yesterdayStr;
       }
-      if (studentAnalysisFilter === 'last_week') {
-        return rec.date >= weekAgoStr;
+      if (studentAnalysisFilter === 'custom') {
+        return rec.date === customAnalysisDate;
       }
+      // 'overall': all records ever marked for student
       return true;
     });
-  }, [attendanceRecords, studentAnalysisFilter]);
+  }, [attendanceRecords, studentAnalysisFilter, customAnalysisDate]);
 
   // Aggregate by subject dynamically
   const activeTableData = React.useMemo(() => {
@@ -833,12 +844,13 @@ export default function StudentDashboardScreen({ onNavigate }) {
               </View>
             </View>
 
-            {/* Time Horizon Filter Buttons (Requested: Monthly, Last Week, Yesterday) */}
-            <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
+            {/* Time Horizon Filter Buttons: Today, Yesterday, Custom Date, Overall */}
+            <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
               {[
-                { id: 'monthly', label: `📅 Monthly` },
-                { id: 'last_week', label: `🗓️ Last Week` },
+                { id: 'today', label: `🟢 Today` },
                 { id: 'yesterday', label: `⏱️ Yesterday` },
+                { id: 'custom', label: `📅 Custom` },
+                { id: 'overall', label: `📊 Overall` },
               ].map(f => (
                 <TouchableOpacity
                   key={f.id}
@@ -847,11 +859,16 @@ export default function StudentDashboardScreen({ onNavigate }) {
                     { backgroundColor: colors.bgCard, borderColor: colors.borderSubtle, flex: 1, paddingVertical: 10, alignItems: 'center' },
                     studentAnalysisFilter === f.id && { backgroundColor: colors.accentBlue, borderColor: colors.accentBlue }
                   ]}
-                  onPress={() => setStudentAnalysisFilter(f.id)}
+                  onPress={() => {
+                    setStudentAnalysisFilter(f.id);
+                    if (f.id === 'custom') {
+                      setShowCustomDateModal(true);
+                    }
+                  }}
                 >
                   <Text style={[
                     styles.dayPillText,
-                    { color: colors.textSecondary, fontSize: 11, fontWeight: '700' },
+                    { color: colors.textSecondary, fontSize: 10.5, fontWeight: '700' },
                     studentAnalysisFilter === f.id && { color: '#FFFFFF', fontWeight: '900' }
                   ]}>
                     {f.label}
@@ -860,14 +877,20 @@ export default function StudentDashboardScreen({ onNavigate }) {
               ))}
             </View>
 
-            {/* Academic Attendance Table (Matching Image 4 Format) */}
+            {/* Academic Attendance Table */}
             <View style={[styles.profileCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSubtle, padding: 14, marginBottom: 0 }]}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <Text style={{ fontSize: 15, fontWeight: '800', color: colors.textPrimary }}>
                   📋 Academic Attendance Sheet
                 </Text>
                 <Text style={{ fontSize: 11, fontWeight: '700', color: colors.accentBlue }}>
-                  {studentAnalysisFilter === 'last_week' ? 'Last Week Report' : studentAnalysisFilter === 'yesterday' ? 'Yesterday Report' : 'Monthly Statement'}
+                  {studentAnalysisFilter === 'today'
+                    ? "Today's Report"
+                    : studentAnalysisFilter === 'yesterday'
+                    ? 'Yesterday Report'
+                    : studentAnalysisFilter === 'custom'
+                    ? `Report for ${customAnalysisDate}`
+                    : 'Overall Statement'}
                 </Text>
               </View>
 
@@ -1964,6 +1987,114 @@ export default function StudentDashboardScreen({ onNavigate }) {
                   ))
                 )}
               </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ══════ CUSTOM DATE SELECTION MODAL ══════ */}
+      <Modal
+        visible={showCustomDateModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCustomDateModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: colors.bgPrimary, borderColor: colors.borderSubtle, maxHeight: '80%' }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.borderSubtle }]}>
+              <View>
+                <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
+                  📅 Select Custom Date
+                </Text>
+                <Text style={[styles.modalSub, { color: colors.textSecondary }]}>
+                  Choose a date to view attendance report
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowCustomDateModal(false)}
+                style={[styles.modalCloseBtn, { backgroundColor: colors.bgGlass }]}
+              >
+                <Text style={{ fontSize: 16, color: colors.textSecondary }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
+              {/* Currently Selected Date Banner */}
+              <View style={{
+                backgroundColor: colors.accentBlueGlow,
+                borderRadius: 14,
+                padding: 16,
+                borderWidth: 1.5,
+                borderColor: colors.accentBlue + '50',
+                alignItems: 'center'
+              }}>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: colors.textMuted, letterSpacing: 0.5 }}>CURRENTLY SELECTED DATE</Text>
+                <Text style={{ fontSize: 22, fontWeight: '900', color: colors.accentBlue, marginTop: 4 }}>
+                  📆 {customAnalysisDate}
+                </Text>
+              </View>
+
+              {/* Quick Select from Available Recorded Dates */}
+              <Text style={{ fontSize: 13, fontWeight: '800', color: colors.textPrimary, marginTop: 4 }}>
+                Select from Attendance Recorded Dates:
+              </Text>
+
+              {availableAnalysisDates.length === 0 ? (
+                <View style={{ padding: 20, alignItems: 'center', backgroundColor: colors.bgGlass, borderRadius: 12 }}>
+                  <Text style={{ fontSize: 24, marginBottom: 6 }}>📭</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}>No past attendance records found</Text>
+                </View>
+              ) : (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {availableAnalysisDates.map(d => (
+                    <TouchableOpacity
+                      key={d}
+                      onPress={() => {
+                        setCustomAnalysisDate(d);
+                        setStudentAnalysisFilter('custom');
+                        setShowCustomDateModal(false);
+                      }}
+                      style={[{
+                        paddingHorizontal: 14,
+                        paddingVertical: 10,
+                        borderRadius: 12,
+                        borderWidth: 1.5,
+                      },
+                      customAnalysisDate === d
+                        ? { backgroundColor: colors.accentBlue, borderColor: colors.accentBlue }
+                        : { backgroundColor: colors.bgCard, borderColor: colors.borderSubtle }
+                      ]}
+                    >
+                      <Text style={{
+                        fontSize: 12,
+                        fontWeight: '800',
+                        color: customAnalysisDate === d ? '#FFFFFF' : colors.textPrimary
+                      }}>
+                        📆 {d}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              {/* Apply / Confirm Button */}
+              <TouchableOpacity
+                onPress={() => {
+                  setStudentAnalysisFilter('custom');
+                  setShowCustomDateModal(false);
+                }}
+                style={{
+                  backgroundColor: colors.accentBlue,
+                  borderRadius: 14,
+                  paddingVertical: 14,
+                  alignItems: 'center',
+                  marginTop: 10
+                }}
+              >
+                <Text style={{ fontSize: 14, fontWeight: '900', color: '#FFFFFF' }}>
+                  Done / Apply Filter
+                </Text>
+              </TouchableOpacity>
             </ScrollView>
           </View>
         </View>

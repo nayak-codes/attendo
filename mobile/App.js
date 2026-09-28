@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, SafeAreaView } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { AttendanceProvider, useAttendance } from './src/context/AttendanceContext';
@@ -68,7 +68,7 @@ function MainApp() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
+    <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} backgroundColor={colors.bgSecondary} />
       <View style={styles.screenWrapper}>
         {currentScreen === 'Login' && (
@@ -95,7 +95,7 @@ function MainApp() {
       </View>
       {/* Global notification toast overlay */}
       <NotificationBridge />
-    </SafeAreaView>
+    </View>
   );
 }
 

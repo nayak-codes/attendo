@@ -155,14 +155,25 @@ export const AttendanceProvider = ({ children }) => {
         attendanceList
       );
 
-      // Also keep locally for teacher dashboard today's sessions
+      // Keep locally for teacher dashboard today's sessions
       const newSession = {
         id: sessionId,
         ...sessionInfo,
         attendance: attendanceList,
         submittedAt: new Date().toISOString(),
       };
-      setLocalSessions(prev => [newSession, ...prev]);
+      setLocalSessions(prev => {
+        const existingIdx = prev.findIndex(s =>
+          s.id === sessionId ||
+          (s.date === sessionInfo.date && s.section === sessionInfo.section && s.subject === sessionInfo.subject && s.session === sessionInfo.session)
+        );
+        if (existingIdx >= 0) {
+          const updated = [...prev];
+          updated[existingIdx] = newSession;
+          return updated;
+        }
+        return [newSession, ...prev];
+      });
       return newSession;
     } finally {
       setSubmitting(false);

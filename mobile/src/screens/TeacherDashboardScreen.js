@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput } from 'react-native';
 import HeaderBar from '../components/HeaderBar';
 import BottomNavBar from '../components/BottomNavBar';
@@ -207,13 +207,56 @@ export default function TeacherDashboardScreen({ onNavigate }) {
   // Current active day schedule classes
   const activeDaySchedule = (activeScheduleData.find(d => d.day === selectedScheduleDay) || dynamicWeeklySchedule.find(d => d.day === selectedScheduleDay))?.classes || [];
 
+  // Helper: Find existing submitted session for a class slot on today's date
+  const getExistingSessionForClass = (cls) => {
+    if (!cls) return null;
+    const clsSubj = (cls.rawSubject || cls.subject || '').toLowerCase().trim();
+    const clsSec = (cls.rawSec || cls.classSec || '').replace(/.*-/, '').toLowerCase().trim();
+    const clsTime = (cls.time || '').toLowerCase().trim();
+
+    const allSessions = [...sessions, ...liveTeacherSessions];
+    return allSessions.find(s => {
+      if (s.date !== today) return false;
+      const sSubj = (s.subject || '').toLowerCase().trim();
+      const sSec = (s.section || '').replace(/.*-/, '').toLowerCase().trim();
+      const sSession = (s.session || '').toLowerCase().trim();
+
+      const secMatch = !sSec || !clsSec || sSec === clsSec;
+      const subjMatch = sSubj === clsSubj || sSubj.includes(clsSubj) || clsSubj.includes(sSubj);
+      const timeMatch = !clsTime || !sSession || sSession === clsTime || sSession.includes(clsTime.split(' ')[0]) || clsTime.includes(sSession.split(' ')[0]);
+
+      return secMatch && subjMatch && timeMatch;
+    }) || null;
+  };
+
   const handleMarkAttendanceForClass = (cls) => {
-    setForm(prev => ({
-      ...prev,
+    const existingSession = getExistingSessionForClass(cls);
+
+    let existingAttMap = {};
+    let attendanceList = [];
+    if (existingSession) {
+      if (existingSession.attendance && Array.isArray(existingSession.attendance)) {
+        attendanceList = existingSession.attendance;
+        existingSession.attendance.forEach(rec => {
+          const sId = rec.studentId || rec.id;
+          if (sId) existingAttMap[sId] = rec.status;
+        });
+      }
+    }
+
+    const sessionInfo = {
+      ...form,
       subject: cls.rawSubject || cls.subject.replace(/ Lab$/i, '').replace(/ Mentorship$/i, ''),
       section: cls.rawSec || (cls.classSec ? cls.classSec.replace(/.*-/, '') : 'A'),
-    }));
-    setActiveBottomTab('attendance');
+      session: cls.time || form.session,
+      date: today,
+      existingSessionId: existingSession?.id || null,
+      existingAttendance: existingAttMap,
+      attendanceList: attendanceList,
+      isEdit: !!existingSession,
+    };
+    setForm(sessionInfo);
+    onNavigate('Attendance', sessionInfo);
   };
 
   const handleSaveTtSlot = () => {
@@ -334,13 +377,49 @@ export default function TeacherDashboardScreen({ onNavigate }) {
     });
   }, [firestoreSectionStudents, subjectAttRecords, firestoreAttMap, matchingSessions, totalClasses, analysisSection]);
 
+  // Today sessions for selected analysis subject & section
+  const todaySessionsForSubject = useMemo(() => {
+    const all = [...liveTeacherSessions, ...sessions];
+    return all.filter(s => {
+      if (s.date !== today) return false;
+      const subMatch = !analysisSubject || (s.subject && s.subject.toLowerCase().trim() === analysisSubject.toLowerCase().trim());
+      const secMatch = !analysisSection || (s.section && s.section.toLowerCase().trim() === analysisSection.toLowerCase().trim());
+      return subMatch && secMatch;
+    });
+  }, [liveTeacherSessions, sessions, analysisSubject, analysisSection, today]);
+
+  const getTodayStudentStatus = useCallback((st) => {
+    if (todaySessionsForSubject.length === 0) return { status: 'none', label: '⏳ Not Marked Today' };
+
+    let isPresent = false;
+    let isAbsent = false;
+
+    todaySessionsForSubject.forEach(sess => {
+      const rec = (sess.attendance || []).find(a =>
+        a.rollNo === st.rollNo || (a.name && a.name.toLowerCase() === (st.name || '').toLowerCase())
+      );
+      if (rec) {
+        if (rec.status === 'present') isPresent = true;
+        if (rec.status === 'absent') isAbsent = true;
+      }
+    });
+
+    if (isPresent) return { status: 'present', label: '🟢 Present Today' };
+    if (isAbsent) return { status: 'absent', label: '🔴 Absent Today' };
+    return { status: 'none', label: '⏳ Not Marked Today' };
+  }, [todaySessionsForSubject]);
+
   const lowAttendanceStudents = sectionStudents.filter(s => s.total > 0 && (s.attended / s.total) < 0.75);
   const safeAttendanceStudents = sectionStudents.filter(s => s.total > 0 && (s.attended / s.total) >= 0.75);
+  const todayPresentStudents = sectionStudents.filter(s => getTodayStudentStatus(s).status === 'present');
+  const todayAbsentStudents = sectionStudents.filter(s => getTodayStudentStatus(s).status === 'absent');
 
   const displayedStudents = analysisFilter === 'low'
     ? lowAttendanceStudents
     : analysisFilter === 'safe'
     ? safeAttendanceStudents
+    : analysisFilter === 'today'
+    ? sectionStudents
     : sectionStudents;
 
   const classAvgPct = (sectionStudents.length > 0)
@@ -429,7 +508,7 @@ export default function TeacherDashboardScreen({ onNavigate }) {
             <View style={styles.quickActionsRow}>
               <TouchableOpacity
                 style={[styles.quickActionBtn, { backgroundColor: colors.accentBlueGlow, borderColor: colors.accentBlue }]}
-                onPress={() => setActiveBottomTab('attendance')}
+                onPress={() => onNavigate('Attendance', form)}
                 activeOpacity={0.7}
               >
                 <Text style={styles.quickActionEmoji}>📋</Text>
@@ -499,21 +578,24 @@ export default function TeacherDashboardScreen({ onNavigate }) {
 
               <View style={styles.timelineList}>
                 {activeDaySchedule.map((item, idx) => {
-                  const isCompleted = item.status === 'completed';
-                  const isNext = item.status === 'next';
+                  const existingSession = getExistingSessionForClass(item);
+                  const isCompleted = !!existingSession || item.status === 'completed';
+                  const isNext = !existingSession && item.status === 'next';
+                  const presentCount = existingSession?.presentCount ?? (existingSession?.attendance?.filter(a => a.status === 'present').length || 0);
+
                   return (
-                    <View key={idx} style={[styles.timelineItem, { borderLeftColor: isNext ? colors.accentBlue : isCompleted ? colors.present : colors.borderSubtle }]}>
+                    <View key={idx} style={[styles.timelineItem, { borderLeftColor: isCompleted ? colors.present : isNext ? colors.accentBlue : colors.borderSubtle }]}>
                       <View style={styles.timelineTopRow}>
                         <Text style={[styles.timelineTime, { color: isNext ? colors.accentBlue : colors.textMuted }]}>{item.time}</Text>
                         <View style={[
                           styles.statusBadge,
-                          { backgroundColor: isCompleted ? colors.presentBg : isNext ? colors.accentBlueGlow : colors.bgGlass }
+                          { backgroundColor: isCompleted ? 'rgba(34, 197, 94, 0.15)' : isNext ? colors.accentBlueGlow : colors.bgGlass, borderColor: isCompleted ? 'rgba(34, 197, 94, 0.3)' : 'transparent', borderWidth: isCompleted ? 1 : 0 }
                         ]}>
                           <Text style={[
                             styles.statusBadgeText,
                             { color: isCompleted ? colors.present : isNext ? colors.accentBlue : colors.textMuted }
                           ]}>
-                            {isCompleted ? '✓ Completed' : isNext ? '⏱️ Next Up' : 'Scheduled'}
+                            {isCompleted ? `✓ Marked (${presentCount} P)` : isNext ? '⏱️ Next Up' : 'Scheduled'}
                           </Text>
                         </View>
                       </View>
@@ -524,11 +606,22 @@ export default function TeacherDashboardScreen({ onNavigate }) {
                       </Text>
 
                       <TouchableOpacity
-                        style={[styles.timelineMarkBtn, { backgroundColor: colors.accentBlue, marginTop: 10 }]}
+                        style={[
+                          styles.timelineMarkBtn,
+                          isCompleted
+                            ? { backgroundColor: colors.accentBlueGlow, borderColor: colors.accentBlue, borderWidth: 1.5 }
+                            : { backgroundColor: colors.accentBlue },
+                          { marginTop: 10 }
+                        ]}
                         onPress={() => handleMarkAttendanceForClass(item)}
                         activeOpacity={0.8}
                       >
-                        <Text style={styles.timelineMarkBtnText}>🚀 Mark Class Attendance →</Text>
+                        <Text style={[
+                          styles.timelineMarkBtnText,
+                          isCompleted && { color: colors.accentBlue, fontWeight: '800' }
+                        ]}>
+                          {isCompleted ? '✏️ Edit Attendance →' : '🚀 Mark Class Attendance →'}
+                        </Text>
                       </TouchableOpacity>
                     </View>
                   );
@@ -699,8 +792,13 @@ export default function TeacherDashboardScreen({ onNavigate }) {
               <View style={[styles.analysisSummaryBox, { backgroundColor: colors.bgGlass, borderColor: colors.borderSubtle }]}>
                 <View style={styles.summaryBoxRow}>
                   <View style={styles.summaryItem}>
+                    <Text style={[styles.summaryVal, { color: colors.present }]}>{todaySessionsForSubject.length}</Text>
+                    <Text style={[styles.summaryLbl, { color: colors.textMuted }]}>Today's Sessions</Text>
+                  </View>
+
+                  <View style={styles.summaryItem}>
                     <Text style={[styles.summaryVal, { color: colors.accentBlue }]}>{totalClasses}</Text>
-                    <Text style={[styles.summaryLbl, { color: colors.textMuted }]}>Total Classes Held</Text>
+                    <Text style={[styles.summaryLbl, { color: colors.textMuted }]}>Total Classes</Text>
                   </View>
 
                   <View style={styles.summaryItem}>
@@ -753,6 +851,7 @@ export default function TeacherDashboardScreen({ onNavigate }) {
             <View style={styles.filterTabsRow}>
               {[
                 { id: 'all', label: `All (${sectionStudents.length})` },
+                { id: 'today', label: `📅 Today (${todayPresentStudents.length}P / ${todayAbsentStudents.length}A)` },
                 { id: 'low', label: `⚠️ Low (<75%) (${lowAttendanceStudents.length})` },
                 { id: 'safe', label: `🟢 Safe (≥75%) (${safeAttendanceStudents.length})` },
               ].map(f => (
@@ -790,7 +889,7 @@ export default function TeacherDashboardScreen({ onNavigate }) {
                   <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' }}>
                     {firestoreSectionStudents.length === 0
                       ? 'No Students Registered in Sec ' + analysisSection
-                      : analysisFilter === 'low' ? 'No Low Attendance Students! 🎉' : 'No Safe Attendance Students'}
+                      : analysisFilter === 'low' ? 'No Low Attendance Students! 🎉' : analysisFilter === 'today' ? 'No Attendance Marked Today' : 'No Safe Attendance Students'}
                   </Text>
                   <Text style={{ fontSize: 12, color: colors.textMuted, textAlign: 'center', paddingHorizontal: 20 }}>
                     {firestoreSectionStudents.length === 0
@@ -804,6 +903,7 @@ export default function TeacherDashboardScreen({ onNavigate }) {
                 const pct = stTotal > 0 ? Math.round((st.attended / stTotal) * 100) : 0;
                 const isLow = stTotal > 0 && pct < 75;
                 const isAlertSent = alertSentMap[st.id];
+                const todayStatus = getTodayStudentStatus(st);
 
                 return (
                   <View key={st.id || st.rollNo} style={[styles.studentAnalysisRow, { borderBottomColor: colors.borderSubtle }]}>
@@ -838,13 +938,33 @@ export default function TeacherDashboardScreen({ onNavigate }) {
                         {st.attended} / {stTotal} <Text style={{ fontSize: 10, color: colors.textMuted }}>Classes</Text>
                       </Text>
 
-                      <View style={[
-                        styles.pctBadge,
-                        { backgroundColor: stTotal === 0 ? colors.bgGlass : isLow ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)' }
-                      ]}>
-                        <Text style={[styles.pctBadgeTxt, { color: stTotal === 0 ? colors.textMuted : isLow ? colors.absent : colors.present }]}>
-                          {stTotal === 0 ? 'No class yet' : `${pct}% ${isLow ? '⚠️ Low' : '🟢 Safe'}`}
-                        </Text>
+                      <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center', marginTop: 2 }}>
+                        {/* Overall Badge */}
+                        <View style={[
+                          styles.pctBadge,
+                          { backgroundColor: stTotal === 0 ? colors.bgGlass : isLow ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)' }
+                        ]}>
+                          <Text style={[styles.pctBadgeTxt, { color: stTotal === 0 ? colors.textMuted : isLow ? colors.absent : colors.present }]}>
+                            {stTotal === 0 ? 'No class' : `${pct}% ${isLow ? '⚠️ Low' : '🟢 Safe'}`}
+                          </Text>
+                        </View>
+
+                        {/* Today Status Badge */}
+                        <View style={[
+                          styles.pctBadge,
+                          {
+                            backgroundColor: todayStatus.status === 'present' ? 'rgba(34, 197, 94, 0.15)' : todayStatus.status === 'absent' ? 'rgba(239, 68, 68, 0.15)' : colors.bgGlass,
+                            borderColor: todayStatus.status === 'present' ? 'rgba(34, 197, 94, 0.3)' : todayStatus.status === 'absent' ? 'rgba(239, 68, 68, 0.3)' : colors.borderSubtle,
+                            borderWidth: 1,
+                          }
+                        ]}>
+                          <Text style={[
+                            styles.pctBadgeTxt,
+                            { color: todayStatus.status === 'present' ? colors.present : todayStatus.status === 'absent' ? colors.absent : colors.textMuted }
+                          ]}>
+                            {todayStatus.label}
+                          </Text>
+                        </View>
                       </View>
 
                       {isLow && (
@@ -916,30 +1036,50 @@ export default function TeacherDashboardScreen({ onNavigate }) {
             </ScrollView>
 
             {/* Faculty Class Schedule for Day */}
-            {activeDaySchedule.map((cls, index) => (
-              <View key={index} style={[styles.ttClassCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSubtle }]}>
-                <View style={[styles.ttTimeCol, { backgroundColor: colors.bgGlass }]}>
-                  <Text style={styles.ttTimeIcon}>⏰</Text>
-                  <Text style={[styles.ttTimeText, { color: colors.accentBlue }]}>{cls.time}</Text>
-                </View>
+            {activeDaySchedule.map((cls, index) => {
+              const existingSession = getExistingSessionForClass(cls);
+              const isMarked = !!existingSession;
+              const presentCount = existingSession?.presentCount ?? (existingSession?.attendance?.filter(a => a.status === 'present').length || 0);
 
-                <View style={styles.ttMainCol}>
-                  <Text style={[styles.ttSubject, { color: colors.textPrimary }]}>{cls.subject}</Text>
-                  <Text style={[styles.ttTeacher, { color: colors.textSecondary }]}>👥 Class: {cls.classSec}</Text>
-                  <View style={[styles.ttRoomTag, { backgroundColor: colors.bgGlass, marginBottom: 8 }]}>
-                    <Text style={[styles.ttRoomText, { color: colors.textMuted }]}>📍 Room: {cls.room}</Text>
+              return (
+                <View key={index} style={[styles.ttClassCard, { backgroundColor: colors.bgCard, borderColor: isMarked ? 'rgba(34, 197, 94, 0.3)' : colors.borderSubtle }]}>
+                  <View style={[styles.ttTimeCol, { backgroundColor: colors.bgGlass }]}>
+                    <Text style={styles.ttTimeIcon}>{isMarked ? '🟢' : '⏰'}</Text>
+                    <Text style={[styles.ttTimeText, { color: isMarked ? colors.present : colors.accentBlue }]}>{cls.time}</Text>
                   </View>
 
-                  <TouchableOpacity
-                    style={[styles.timelineMarkBtn, { backgroundColor: colors.accentBlue }]}
-                    onPress={() => handleMarkAttendanceForClass(cls)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.timelineMarkBtnText}>🚀 Mark Attendance →</Text>
-                  </TouchableOpacity>
+                  <View style={styles.ttMainCol}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={[styles.ttSubject, { color: colors.textPrimary }]}>{cls.subject}</Text>
+                      {isMarked && (
+                        <View style={{ backgroundColor: 'rgba(34, 197, 94, 0.15)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(34, 197, 94, 0.3)' }}>
+                          <Text style={{ fontSize: 10, fontWeight: '800', color: colors.present }}>✓ Marked ({presentCount} P)</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[styles.ttTeacher, { color: colors.textSecondary }]}>👥 Class: {cls.classSec}</Text>
+                    <View style={[styles.ttRoomTag, { backgroundColor: colors.bgGlass, marginBottom: 8 }]}>
+                      <Text style={[styles.ttRoomText, { color: colors.textMuted }]}>📍 Room: {cls.room}</Text>
+                    </View>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.timelineMarkBtn,
+                        isMarked
+                          ? { backgroundColor: colors.accentBlueGlow, borderColor: colors.accentBlue, borderWidth: 1.5 }
+                          : { backgroundColor: colors.accentBlue }
+                      ]}
+                      onPress={() => handleMarkAttendanceForClass(cls)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.timelineMarkBtnText, isMarked && { color: colors.accentBlue, fontWeight: '800' }]}>
+                        {isMarked ? '✏️ Edit Attendance →' : '🚀 Mark Attendance →'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
 

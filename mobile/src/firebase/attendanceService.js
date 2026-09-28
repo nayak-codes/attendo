@@ -17,8 +17,35 @@ import {
 export async function submitSession(sessionInfo, attendanceList) {
   const batch = writeBatch(db);
 
-  // 1. Create session document
-  const sessionRef = doc(collection(db, 'sessions'));
+  let sessionId = sessionInfo.existingSessionId || sessionInfo.id;
+
+  // If no explicit ID passed, check if a session with same date, section, subject & session exists
+  if (!sessionId) {
+    try {
+      const q = query(
+        collection(db, 'sessions'),
+        where('date', '==', sessionInfo.date),
+        where('section', '==', sessionInfo.section),
+        where('subject', '==', sessionInfo.subject),
+        where('session', '==', sessionInfo.session)
+      );
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        sessionId = snap.docs[0].id;
+      }
+    } catch (e) {
+      console.warn('Error checking existing session in Firestore:', e.message);
+    }
+  }
+
+  let sessionRef;
+  if (sessionId) {
+    sessionRef = doc(db, 'sessions', sessionId);
+  } else {
+    sessionRef = doc(collection(db, 'sessions'));
+    sessionId = sessionRef.id;
+  }
+
   const sessionData = {
     subject: sessionInfo.subject,
     section: sessionInfo.section,
@@ -33,13 +60,30 @@ export async function submitSession(sessionInfo, attendanceList) {
     totalCount: attendanceList.length,
     submittedAt: serverTimestamp(),
   };
-  batch.set(sessionRef, sessionData);
 
-  // 2. Create attendance records (one per student)
+  batch.set(sessionRef, sessionData, { merge: true });
+
+  // Delete prior attendance records for this sessionId if updating an existing session
+  if (sessionInfo.existingSessionId || sessionInfo.id) {
+    try {
+      const oldAttQ = query(
+        collection(db, 'attendance'),
+        where('sessionId', '==', sessionId)
+      );
+      const oldAttSnap = await getDocs(oldAttQ);
+      oldAttSnap.forEach(d => {
+        batch.delete(d.ref);
+      });
+    } catch (e) {
+      console.warn('Error deleting old attendance records for session update:', e.message);
+    }
+  }
+
+  // Write attendance records
   attendanceList.forEach(record => {
     const attRef = doc(collection(db, 'attendance'));
     batch.set(attRef, {
-      sessionId: sessionRef.id,
+      sessionId: sessionId,
       studentId: record.studentId || record.id,
       rollNo: record.rollNo,
       name: record.name,
@@ -53,7 +97,7 @@ export async function submitSession(sessionInfo, attendanceList) {
     });
   });
 
-  // 3. Create notifications for ABSENT students
+  // Create notifications for ABSENT students
   const absentStudents = attendanceList.filter(a => a.status === 'absent');
   absentStudents.forEach(student => {
     const notifRef = doc(collection(db, 'notifications'));
@@ -61,7 +105,7 @@ export async function submitSession(sessionInfo, attendanceList) {
       studentId: student.studentId || student.id,
       rollNo: student.rollNo,
       name: student.name,
-      sessionId: sessionRef.id,
+      sessionId: sessionId,
       subject: sessionInfo.subject,
       session: sessionInfo.session,
       date: sessionInfo.date,
@@ -72,7 +116,7 @@ export async function submitSession(sessionInfo, attendanceList) {
   });
 
   await batch.commit();
-  return sessionRef.id;
+  return sessionId;
 }
 
 /**

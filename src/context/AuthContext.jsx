@@ -221,9 +221,9 @@ export const AuthProvider = ({ children }) => {
     }
 
     // Fallback to mock data
-    const roleKey = role === 'admin' ? 'admins' : role === 'teacher' ? 'teachers' : 'students';
+    const roleKey = role === 'admin' ? 'admins' : role === 'coordinator' ? 'coordinators' : role === 'teacher' ? 'teachers' : 'students';
     const list = MOCK_USERS[roleKey] || [];
-    let found = list.find(u => u.collegeId.toUpperCase() === collegeId.toUpperCase());
+    let found = list.find(u => u.collegeId && u.collegeId.toUpperCase() === collegeId.toUpperCase());
 
     // If role is admin and ID ends with -ADMIN or contains ADMIN, auto-provision session
     if (!found && role === 'admin') {
@@ -233,6 +233,20 @@ export const AuthProvider = ({ children }) => {
         password: password || 'admin123',
         name: `${selectedCollegeCode || 'College'} Admin`,
         role: 'admin',
+        collegeCode: selectedCollegeCode || 'VJIT'
+      };
+    }
+
+    // If role is coordinator and auto-provisioning session for testing
+    if (!found && role === 'coordinator') {
+      const deptPart = collegeId.split('-')[0]?.toUpperCase() || 'CSE';
+      found = {
+        id: collegeId.toUpperCase(),
+        collegeId: collegeId.toUpperCase(),
+        password: password || 'admin123',
+        name: `${selectedCollegeCode || 'College'} ${deptPart} Coordinator`,
+        department: deptPart,
+        role: 'coordinator',
         collegeCode: selectedCollegeCode || 'VJIT'
       };
     }

@@ -115,8 +115,15 @@ export const AttendanceProvider = ({ children }) => {
     try {
       const batch = writeBatch(db);
 
-      // 1. Session doc
-      const sessionRef = doc(collection(db, 'sessions'));
+      let sessionId = sessionInfo.existingSessionId || sessionInfo.id;
+      let sessionRef;
+      if (sessionId) {
+        sessionRef = doc(db, 'sessions', sessionId);
+      } else {
+        sessionRef = doc(collection(db, 'sessions'));
+        sessionId = sessionRef.id;
+      }
+
       const sessionData = {
         subject: sessionInfo.subject,
         section: sessionInfo.section,
@@ -131,13 +138,13 @@ export const AttendanceProvider = ({ children }) => {
         totalCount: attendanceList.length,
         submittedAt: serverTimestamp(),
       };
-      batch.set(sessionRef, sessionData);
+      batch.set(sessionRef, sessionData, { merge: true });
 
-      // 2. Attendance records
+      // Attendance records
       attendanceList.forEach(record => {
         const attRef = doc(collection(db, 'attendance'));
         batch.set(attRef, {
-          sessionId: sessionRef.id,
+          sessionId: sessionId,
           studentId: record.id || record.studentId,
           rollNo: record.rollNo,
           name: record.name,
@@ -151,14 +158,14 @@ export const AttendanceProvider = ({ children }) => {
         });
       });
 
-      // 3. Notifications for absent students
+      // Notifications for absent students
       attendanceList.filter(a => a.status === 'absent').forEach(student => {
         const notifRef = doc(collection(db, 'notifications'));
         batch.set(notifRef, {
           studentId: student.id || student.studentId,
           rollNo: student.rollNo,
           name: student.name,
-          sessionId: sessionRef.id,
+          sessionId: sessionId,
           subject: sessionInfo.subject,
           session: sessionInfo.session,
           date: sessionInfo.date,
@@ -171,12 +178,20 @@ export const AttendanceProvider = ({ children }) => {
       await batch.commit();
 
       const newSession = {
-        id: sessionRef.id,
+        id: sessionId,
         ...sessionInfo,
         attendance: attendanceList,
         submittedAt: new Date().toISOString(),
       };
-      setSessions(prev => [newSession, ...prev]);
+      setSessions(prev => {
+        const idx = prev.findIndex(s => s.id === sessionId || (s.date === sessionInfo.date && s.section === sessionInfo.section && s.subject === sessionInfo.subject && s.session === sessionInfo.session));
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = newSession;
+          return updated;
+        }
+        return [newSession, ...prev];
+      });
       return newSession;
     } finally {
       setSubmitting(false);

@@ -41,7 +41,9 @@ export default function AttendancePreviewScreen({ data, onNavigate }) {
       <View style={styles.successContainer}>
         <View style={styles.successCard}>
           <Text style={styles.successIcon}>🎉</Text>
-          <Text style={styles.successTitle}>Attendance Submitted!</Text>
+          <Text style={styles.successTitle}>
+            {sessionInfo?.isEdit ? 'Attendance Updated!' : 'Attendance Submitted!'}
+          </Text>
           <Text style={styles.successDesc}>
             {presentCount} Present • {absentCount} Absent
           </Text>
@@ -134,7 +136,7 @@ export default function AttendancePreviewScreen({ data, onNavigate }) {
           {submitting ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.submitBtnText}>🚀 Final Submit</Text>
+            <Text style={styles.submitBtnText}>{sessionInfo?.isEdit ? '💾 Update Attendance' : '🚀 Final Submit'}</Text>
           )}
         </TouchableOpacity>
       </View>

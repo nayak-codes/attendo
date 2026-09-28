@@ -9,6 +9,7 @@ import AttendancePage from './pages/AttendancePage';
 import StudentDashboard from './pages/StudentDashboard';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import CollegeAdminDashboard from './pages/CollegeAdminDashboard';
+import CoordinatorDashboard from './pages/CoordinatorDashboard';
 
 // Protected route wrapper
 const ProtectedRoute = ({ children, allowedRole }) => {
@@ -25,6 +26,7 @@ const AppRoutes = () => {
     if (!user) return <LoginPage />;
     if (user.role === 'superadmin') return <Navigate to="/superadmin" replace />;
     if (user.role === 'admin') return <Navigate to="/admin" replace />;
+    if (user.role === 'coordinator') return <Navigate to="/coordinator" replace />;
     if (user.role === 'teacher') return <Navigate to="/teacher" replace />;
     return <Navigate to="/student" replace />;
   };
@@ -47,6 +49,14 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute allowedRole="admin">
               <CollegeAdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/coordinator"
+          element={
+            <ProtectedRoute allowedRole="coordinator">
+              <CoordinatorDashboard />
             </ProtectedRoute>
           }
         />

@@ -43,6 +43,7 @@ const LoginPage = () => {
       if (role === 'teacher') navigate('/teacher');
       else if (role === 'student') navigate('/student');
       else if (role === 'admin') navigate('/admin');
+      else if (role === 'coordinator') navigate('/coordinator');
     } else {
       setError(result.error || 'Login failed. Please check your credentials.');
     }
@@ -65,6 +66,8 @@ const LoginPage = () => {
     setLoginMode('college');
     const creds = demoType === 'admin'
       ? { id: 'VJIT-ADMIN', pass: 'admin123', role: 'admin', college: 'VJIT' }
+      : demoType === 'coordinator'
+      ? { id: 'CSE-COORD', pass: 'admin123', role: 'coordinator', college: 'VJIT' }
       : demoType === 'teacher'
       ? { id: 'VJIT-T-001', pass: 'teacher123', role: 'teacher', college: 'VJIT' }
       : { id: 'CE21001', pass: 'student123', role: 'student', college: 'VJIT' };
@@ -77,6 +80,7 @@ const LoginPage = () => {
     const result = await login(creds.id, creds.pass, creds.role, creds.college);
     if (result.success) {
       if (creds.role === 'admin') navigate('/admin');
+      else if (creds.role === 'coordinator') navigate('/coordinator');
       else if (creds.role === 'teacher') navigate('/teacher');
       else navigate('/student');
     } else setError(result.error || 'Demo login failed');
@@ -172,7 +176,7 @@ const LoginPage = () => {
                 {/* Role Selector */}
                 <div className="form-group">
                   <label className="form-label">Select Role</label>
-                  <div className="role-selector role-selector-3">
+                  <div className="role-selector role-selector-4">
                     <button
                       type="button"
                       className={`role-btn ${role === 'teacher' ? 'role-active' : ''}`}
@@ -193,6 +197,20 @@ const LoginPage = () => {
                     </button>
                     <button
                       type="button"
+                      className={`role-btn ${role === 'coordinator' ? 'role-active' : ''}`}
+                      onClick={() => {
+                        setRole('coordinator');
+                        setCollegeId('CSE-COORD');
+                        if (!password) setPassword('admin123');
+                        setError('');
+                      }}
+                      id="role-coordinator"
+                    >
+                      <span className="role-icon">🏢</span>
+                      <span>Dept. Coord</span>
+                    </button>
+                    <button
+                      type="button"
                       className={`role-btn ${role === 'admin' ? 'role-active' : ''}`}
                       onClick={() => {
                         setRole('admin');
@@ -202,7 +220,7 @@ const LoginPage = () => {
                       }}
                       id="role-admin"
                     >
-                      <span className="role-icon">🏢</span>
+                      <span className="role-icon">🏛️</span>
                       <span>College Admin</span>
                     </button>
                   </div>
@@ -213,6 +231,8 @@ const LoginPage = () => {
                   <label className="form-label">
                     {role === 'teacher'
                       ? 'Teacher ID / Employee Code'
+                      : role === 'coordinator'
+                      ? 'Dept. Coordinator ID (e.g. CSE-COORD)'
                       : role === 'admin'
                       ? 'College Admin User ID'
                       : 'Student Roll Number / College ID'}
@@ -224,6 +244,8 @@ const LoginPage = () => {
                     placeholder={
                       role === 'teacher'
                         ? 'e.g. VJIT-T-001'
+                        : role === 'coordinator'
+                        ? 'e.g. CSE-COORD'
                         : role === 'admin'
                         ? 'e.g. VJIT-ADMIN'
                         : 'e.g. CE21001'
@@ -297,7 +319,7 @@ const LoginPage = () => {
               ) : loginMode === 'superadmin' ? (
                 '👑 Access Super Admin Portal'
               ) : (
-                `Sign In as ${role === 'teacher' ? 'Teacher' : role === 'admin' ? 'College Admin' : 'Student'} (${selectedCollegeCode})`
+                `Sign In as ${role === 'teacher' ? 'Teacher' : role === 'coordinator' ? 'Dept. Coordinator' : role === 'admin' ? 'College Admin' : 'Student'} (${selectedCollegeCode})`
               )}
             </button>
           </form>
